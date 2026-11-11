@@ -17,18 +17,20 @@ await sbx.restore(snap); // back to before the migration
 |---|---|---|
 | `sbx.snapshot(name?)` | `Promise<Snapshot>` | Takes a snapshot of disk and memory |
 | `sbx.snapshots()` | `Promise<Snapshot[]>` | This sandbox's snapshots, newest first |
-| `sbx.restore(snapshot)` | `Promise<Sandbox>` | Rolls the sandbox back. Takes a `Snapshot` or its `snp_` id, and updates `sbx.record` |
+| `sbx.restore(snapshot)` | `Promise<Sandbox>` | Rolls the sandbox back. Takes a `Snapshot` of this sandbox or its `snp_` id, and updates `sbx.record` |
 
 `snapshot` works on a running or stopped sandbox. A running sandbox pauses briefly while the snapshot is taken.
 
 - `name` is 1 to 64 printable characters and must be unique within the sandbox (`name_taken` otherwise). Left out, it is `snapshot-` and the UTC time, such as `snapshot-20261111-104512`.
 - A sandbox keeps at most 20 snapshots. The 21st fails with `limit_reached` (409); delete one first.
-- Every snapshot includes memory. There are no disk-only snapshots.
+- Every snapshot includes memory (RAM) as well as disk. There are no disk-only snapshots, so the SDK has no option for it, and the API refuses `include_ram: false`.
 
 `restore` also needs the sandbox running or stopped. A running sandbox restarts from the snapshot and is running afterwards. A stopped sandbox stays stopped and resumes from the snapshot on its next `start()`. Anything done since the snapshot is lost unless you snapshot it first.
 
+`sbx.restore(snap)` only takes a snapshot of `sbx` itself. Given another sandbox's snapshot, it throws `ZodeError` with code `wrong_sandbox` (status 0) before calling the API, and nothing is rolled back. Given an `snp_` id, it looks the snapshot up first and throws `not_found` (404) for an unknown id. The client's `zode.snapshots.restore(id)` has no such check: it rolls back whichever sandbox the snapshot belongs to.
+
 <Warning>
-  Pass `restore` a snapshot of the same sandbox. The SDK does not check: given another sandbox's snapshot, it rolls back that other sandbox, and `sbx.record` then describes the other sandbox.
+  `@zodedev/sdk` 0.1.1 does not have this check; it ships in the next npm release. With 0.1.1, pass `restore` only snapshots of the same sandbox: given another sandbox's snapshot, it rolls back that other sandbox, and `sbx.record` then describes the other sandbox.
 </Warning>
 
 ## On the client

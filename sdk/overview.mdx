@@ -6,6 +6,10 @@ description: "Install @zodedev/sdk, set an API key, and create, run and delete a
 
 `@zodedev/sdk` wraps the Zode API for Node. Version 0.1.1 is on npm. It is ESM only, needs Node 22 or later, and has no runtime dependencies.
 
+<Note>
+  These pages also cover changes made after 0.1.1 that ship in the next npm release: the `image` option on `Sandbox.create`, `sbx.featureError`, the `wrong_sandbox` check in `sbx.restore()`, and the console link in the `no_api_key` message. Each page says what to do with 0.1.1.
+</Note>
+
 Python SDK: coming soon.
 
 ## Install
@@ -18,7 +22,7 @@ The package ships as ES modules only. Load it with `import`, not `require`.
 
 ## Get an API key
 
-Create a key in the [console](https://console.zode.dev) under **Settings**, **API keys**, or with `POST /v1/tokens` (see the [API reference](/api-reference/overview)). A key starts with `zode_tok_` and belongs to one workspace.
+Create a key in the console under **API keys** ([console.zode.dev/tokens](https://console.zode.dev/tokens)), or with `POST /v1/tokens` (see the [API reference](/api-reference/overview)). A key starts with `zode_tok_` and belongs to one workspace.
 
 ```bash
 export ZODE_API_KEY=zode_tok_...
@@ -101,7 +105,7 @@ const usage = await zode.request("GET", "/v1/usage");
 }
 ```
 
-The record updates after every call that returns a sandbox: `refresh`, `stop`, `start`, `restore`, and switching the browser or desktop. Options you pass in are camelCase (`gitRepo`, `maxCostMicros`); results such as `exec`'s `exit_code` keep the API's names.
+Right after a create or fork whose browser or desktop could not be switched on, the record also has `feature_error`. The record updates after every call that returns a sandbox: `refresh`, `stop`, `start`, `restore`, and switching the browser or desktop. Options you pass in are camelCase (`gitRepo`, `maxCostMicros`); results such as `exec`'s `exit_code` keep the API's names.
 
 ## End-to-end example
 

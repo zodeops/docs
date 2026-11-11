@@ -20,7 +20,7 @@ curl https://api.zode.dev/v1/sandboxes \
   -H "Authorization: Bearer $ZODE_API_KEY"
 ```
 
-Keys look like `zode_tok_` followed by 64 hex characters. Create one in the console under **Settings**, **API keys**, or with `POST /v1/tokens`. The secret is shown once, in the create response.
+Keys look like `zode_tok_` followed by 64 hex characters. Create one in the console under **API keys** ([console.zode.dev/tokens](https://console.zode.dev/tokens)), or with `POST /v1/tokens`. The secret is shown once, in the create response.
 
 ```bash
 curl https://api.zode.dev/v1/tokens \
@@ -56,18 +56,22 @@ Every error has the same shape:
 }
 ```
 
-Branch on `code`, which is stable. `message` is for people and may change. Common codes:
+Branch on `code`, which is stable. `message` is for people and may change.
+
+`code` is an open set, not a fixed list: new codes are added over time. The `Error` schema in the spec lists every code in use today, grouped by status. When you meet a code your client does not know, handle it by its HTTP status. Common codes:
 
 | Status | Code | Meaning |
 |---|---|---|
 | 400 | `invalid_request`, `bad_request` | A parameter or body field is missing or out of range. |
 | 401 | `unauthorized` | Missing, unknown, expired or revoked key. |
+| 402 | `plan_required` | Your plan does not include this feature, for example the desktop on Free, workspace defaults that switch it on, or audit-log CSV export below Team. |
+| 402 | `credit_exhausted` | The workspace has no card on file and no credit left, so it cannot create, fork or start sandboxes. Add a card or buy credit in **Billing**. |
 | 403 | `forbidden` | Your role may not do this, or `X-Zode-Org` does not match the key. |
 | 403 | `token_scope` | The key's scope does not cover this call. |
-| 403 | `plan_required` | Your plan does not include this feature, for example the desktop on Free. Audit-log CSV export answers 402 with the same code. |
 | 404 | `not_found` | No such resource in this workspace. |
 | 409 | `invalid_state` | The sandbox is in the wrong status, for example exec on a stopped sandbox. |
 | 409 | `concurrency_limit` | Your plan's running-sandbox limit is reached. Stop one first. |
+| 409 | `daily_cap_reached` | Today's spend reached the workspace's daily cap. |
 | 409 | `name_taken` | A resource with that name exists. |
 | 409 | `limit_reached` | A count limit is reached, such as images kept on your plan. |
 | 409 | `browser_off`, `desktop_off` | Switch the feature on first. |
@@ -89,7 +93,16 @@ Making sandboxes (create and fork together) is limited per hour:
 | Workspace | 60 |
 | Client IP address | 60 |
 
-Over a limit, the API answers `429 rate_limited` with a `Retry-After` header: the seconds until you may try again. A few other routes have their own limits and answer the same way, for example member invites (30 per workspace per hour) and alert channel tests (10 per channel per minute). There are no `X-RateLimit-*` headers.
+Over a limit, the API answers `429 rate_limited` with these headers:
+
+| Header | Value |
+|---|---|
+| `Retry-After` | Seconds until you may try again. |
+| `X-RateLimit-Limit` | Requests the window allows. |
+| `X-RateLimit-Remaining` | Requests left in the window. Always `0` on a 429. |
+| `X-RateLimit-Reset` | When the window resets, in Unix seconds. |
+
+The headers describe the window that refused the request, and only 429 answers carry them. A few other routes have their own limits and answer the same way, for example member invites (30 per workspace per hour) and alert channel tests (10 per channel per minute).
 
 The plan's running-sandbox limit is separate: it answers `409 concurrency_limit`, not 429. `GET /v1/concurrency` returns `running`, `limit` and `plan`.
 

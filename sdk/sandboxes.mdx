@@ -27,7 +27,8 @@ console.log(sbx.id, sbx.status); // sbx_... running
 | Option | Type | Default | Notes |
 |---|---|---|---|
 | `name` | `string` | a generated name such as `brave-hopper` | Lowercase letters, digits and `-`, 1 to 63 characters, not starting or ending with `-` |
-| `vcpus` | `number` | `2` | `2`, `4`, `8` or `16`. Picks the size; see below |
+| `vcpus` | `number` | `2` (`small`) | `2`, `4`, `8` or `16`. Picks the size; see below |
+| `image` | `string` | none | A ready custom image, by `img_` id or name. It sets the size and region; see [Custom images](#custom-images) |
 | `region` | `string` | `eu-central` | The only region today. US East is coming soon |
 | `gitRepo` | `string` | `""` | Up to 512 characters |
 | `gitBranch` | `string` | `""` | Up to 255 characters |
@@ -41,43 +42,52 @@ console.log(sbx.id, sbx.status); // sbx_... running
 
 ### Sizes
 
-The host accepts four sizes. You pick one with `vcpus`; RAM and disk follow.
+The host accepts four sizes. You pick one with `vcpus`; RAM and disk follow. Leave `vcpus` out and you get `small`. The size named `default` is 4 vCPU, and you get it only by passing `vcpus: 4`.
 
-| `vcpus` | RAM | Disk | Price per hour |
-|---|---|---|---|
-| 2 | 4 GB | 50 GB | $0.0175 |
-| 4 | 8 GB | 50 GB | $0.035 |
-| 8 | 16 GB | 110 GB | $0.070 |
-| 16 | 32 GB | 250 GB | $0.140 |
+| Size | `vcpus` | RAM | Disk | Price per hour |
+|---|---|---|---|---|
+| `small` (when you pass nothing) | 2 | 4 GB | 50 GB | $0.0175 |
+| `default` | 4 | 8 GB | 50 GB | $0.035 |
+| `large` | 8 | 16 GB | 110 GB | $0.070 |
+| `xlarge` | 16 | 32 GB | 250 GB | $0.140 |
 
 The options type also has `ramMb` and `diskGb`. Leave them out. If you pass them, they must equal the chosen size's values (for example `ramMb: 8192` with `vcpus: 4`); any other value is refused with `invalid_request` and a message that lists the available sizes.
 
 ### Custom images
 
-`Sandbox.create` has no `image` option yet. The API accepts `image` (an `img_` id or image name), so call it through `zode.request` and load the result:
+Pass `image`, a ready custom image of the workspace by `img_` id or name:
 
 ```ts
-import { Zode, type SandboxInfo } from "@zodedev/sdk";
-
-const zode = new Zode();
-const info = await zode.request<SandboxInfo>("POST", "/v1/sandboxes", { image: "node-pg", name: "from-image" });
-const sbx = await zode.sandboxes.get(info.id);
+const sbx = await Sandbox.create({ image: "node-pg", name: "from-image" });
 ```
 
-The image fixes the size and region. Sending a `vcpus` that differs from the image's is refused. See [Custom images](/concepts/images).
+The image fixes the size and region. Leave out `vcpus`, `ramMb`, `diskGb` and `region`, or match the image's; anything else is refused with 400. See [Custom images](/concepts/images).
+
+<Note>
+  The `image` option was added after `@zodedev/sdk` 0.1.1 and ships in the next npm release. With 0.1.1, send it through `zode.request` and load the result:
+
+  ```ts
+  import { Zode, type SandboxInfo } from "@zodedev/sdk";
+
+  const zode = new Zode();
+  const info = await zode.request<SandboxInfo>("POST", "/v1/sandboxes", { image: "node-pg", name: "from-image" });
+  const sbx = await zode.sandboxes.get(info.id);
+  ```
+</Note>
 
 ### When a create is refused
 
 Common refusals, all thrown as `ZodeError` (details in [Errors](/sdk/errors)):
 
 - `concurrency_limit` (409): the plan's running-sandbox limit is reached. Stop one first.
+- `credit_exhausted` (402): the workspace has no card on file and no credit left. Add a card or buy credit in Billing. `fork()` and `start()` fail the same way.
 - `rate_limited` (429): too many creates recently.
 - `daily_cap_reached` (409): the workspace's daily spend cap is reached.
 - `no_capacity` (503): no host in the region has room right now.
-- `plan_required` (403): you asked for the desktop on the Free plan.
+- `plan_required` (402): you asked for the desktop on the Free plan.
 - `unknown_environment` (400): no environment with that id or name.
 
-If the host cannot switch the browser or desktop on, the sandbox is still created with that switch off. Check `sbx.browser.enabled` and `sbx.desktop.enabled` after a create.
+If the host cannot switch the browser or desktop on, the sandbox is still created with that switch off, and `sbx.featureError` says why. See [Browser and desktop](/sdk/browser-desktop#switch-them-on).
 
 ## Get and list
 
@@ -107,7 +117,7 @@ await sbx.stop();  // status "stopped"
 await sbx.start(); // status "running"
 ```
 
-`stop()` hibernates the sandbox: its memory is saved to disk and the VM exits. Compute billing stops; storage is still billed. Only a running sandbox can be stopped.
+`stop()` hibernates the sandbox: its RAM is written to disk and the VM exits. Compute billing stops; storage is still billed. `start()` restores the RAM, so running processes carry on where they were. Only a running sandbox can be stopped.
 
 `start()` brings a stopped sandbox back on the same host. It counts against the plan's running limit, and it fails with `node_full` (409) when that host has no free memory; retry shortly. Both calls throw `invalid_state` (409) from the wrong state.
 

@@ -35,7 +35,8 @@ These come from the SDK, not from an API answer:
 
 | Code | Meaning |
 |---|---|
-| `no_api_key` | No `apiKey` option and no `ZODE_API_KEY` or `ZODE_TOKEN`. Thrown by `new Zode()` and by static helpers that build a client |
+| `no_api_key` | No `apiKey` option and no `ZODE_API_KEY` or `ZODE_TOKEN`. Thrown by `new Zode()` and by static helpers that build a client. Create a key on the console's API keys page, [console.zode.dev/tokens](https://console.zode.dev/tokens) |
+| `wrong_sandbox` | `sbx.restore()` was given a snapshot of another sandbox. Nothing was rolled back |
 | `network_error` | The request could not be sent or the connection failed |
 | `timeout` | An HTTP call ran past the client's `timeoutMs` (default 120 s), or `waitUntilRunning` timed out |
 | `command_failed` | A `CommandError` |
@@ -50,15 +51,18 @@ A `timeout` or `network_error` on a create does not tell you whether the sandbox
 
 The API answers errors as `{"error": {"code": "...", "message": "..."}}`. The message is for people and may change; branch on `code`. If the body has no code, the SDK uses `http_error`.
 
+The set of codes is open: the API adds new ones over time. The table lists the ones you are most likely to meet; the `Error` schema in the [API reference](/api-reference/overview#errors) lists them all. Handle a code you do not recognise by its `status`.
+
 | Status | Code | When |
 |---|---|---|
 | 400 | `bad_request` | The body is not valid JSON for the route |
 | 400 | `invalid_request` | A field failed validation, such as a size the host does not offer; the message says which |
 | 400 | `unknown_environment` | `Sandbox.create({ environment })` named no environment in the workspace |
 | 401 | `unauthorized` | The API key is missing, wrong, expired or revoked |
+| 402 | `plan_required` | The plan does not include the feature, such as the desktop on Free |
+| 402 | `credit_exhausted` | The workspace has no card on file and no credit left, so it cannot create, fork or start sandboxes; add a card or buy credit in Billing |
 | 403 | `forbidden` | Your role in the workspace does not allow this |
 | 403 | `token_scope` | The key's scope (`read_only` or `sandboxes`) does not cover this call |
-| 403 | `plan_required` | The plan does not include the feature, such as the desktop on Free |
 | 404 | `not_found` | No such sandbox, snapshot, environment, variable or secret in this workspace |
 | 409 | `invalid_state` | The sandbox is in the wrong state, such as running a command in a stopped sandbox |
 | 409 | `concurrency_limit` | The plan's running-sandbox limit is reached: "Your free plan runs at most 2 sandboxes at once. Stop one first." |
@@ -79,7 +83,7 @@ The API answers errors as `{"error": {"code": "...", "message": "..."}}`. The me
 
 ## Retry on capacity errors
 
-`no_capacity`, `node_full` and `rate_limited` clear on their own. Retry them with a growing delay. Do not retry `concurrency_limit` or `daily_cap_reached` in a loop: they clear only when you stop a sandbox or the cap changes.
+`no_capacity`, `node_full` and `rate_limited` clear on their own. Retry them with a growing delay. Do not retry `concurrency_limit`, `daily_cap_reached` or `credit_exhausted` in a loop: they clear only when you stop a sandbox, the cap changes or someone adds a card or credit.
 
 ```ts
 import { Sandbox, ZodeError } from "@zodedev/sdk";
@@ -102,4 +106,4 @@ const sbx = await withRetry(() => Sandbox.create({ vcpus: 8 }));
 const child = await withRetry(() => sbx.fork());
 ```
 
-The SDK does not expose response headers, so it cannot read `Retry-After` from a `rate_limited` answer. The wait is in the error message.
+The API sends `Retry-After` and `X-RateLimit-*` headers with a `rate_limited` answer, but the SDK does not expose response headers. The wait is also in the error message.

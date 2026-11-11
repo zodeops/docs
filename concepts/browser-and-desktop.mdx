@@ -15,7 +15,7 @@ A sandbox with neither switched on runs no extra processes.
 | Browser | yes | yes | yes | yes |
 | Desktop | no | yes | yes | yes |
 
-On Free, asking for the desktop answers HTTP 403 `plan_required`: "the free plan does not include the desktop; upgrade in Billing".
+On Free, asking for the desktop answers HTTP 402 `plan_required`: "the free plan does not include the desktop; upgrade in Billing".
 
 ## Switch them on
 
@@ -68,7 +68,7 @@ curl -s -X PATCH https://api.zode.dev/v1/sandboxes/$ID/features \
 
 </CodeGroup>
 
-If a create asks for a feature and the host fails to start it, the sandbox is still created, the feature stays off, and the response carries a `feature_error` message.
+If a create or fork asks for a feature and the host fails to start it, the sandbox is still created and the response carries a `feature_error` message. On a create the feature stays off; on a fork it keeps the parent's value. The SDK exposes the message as `sbx.featureError`.
 
 Switching off stops the processes. Chrome's profile stays on disk, so cookies and logins survive an off and on. Stop, start, restore and fork switch the features back on as recorded.
 
@@ -187,7 +187,7 @@ On a `small` sandbox (4 GB), plan for both together to take roughly 650 MB befor
 |---|---|---|
 | 409 | `invalid_state` | the sandbox is not running; start it first |
 | 409 | `browser_off`, `desktop_off` | the feature is off; switch it on first |
-| 403 | `plan_required` | your plan does not include it |
+| 402 | `plan_required` | your plan does not include it |
 | 501 | `feature_unavailable` | the sandbox's host cannot run it yet |
 | 502 | `node_error` | the host did not start it; the message says why |
 | 400 | `invalid_request` | an action the desktop does not accept |
