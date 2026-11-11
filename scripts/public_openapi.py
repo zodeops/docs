@@ -170,6 +170,8 @@ def clean(text):
     text = text.replace("`org_required`, or a bad request.", "A bad request.")
     text = text.replace(" or `org_required`", "")
     text = text.replace(" (an older zoded)", "")
+    # One of the sizes is named `default`, and it is not what an empty body gets.
+    text = text.replace("An empty body creates a default sandbox.", "An empty body creates a `small` sandbox.")
     text = re.sub(r"\s*\(zoded[^)]*\)", "", text)
     text = text.replace("zoded", "the control plane")
     return text
@@ -188,16 +190,6 @@ def refs(node, out):
 
 
 SESSION_ONLY = {"#/components/parameters/OrgHeader", "#/components/parameters/CSRFHeader"}
-
-
-def mend_responses(op):
-    # `{ description: Settings, same shape as GET }` in flow YAML splits at the comma
-    # into a description plus a stray null key; fold the stray key back in.
-    for resp in op.get("responses", {}).values():
-        stray = [k for k, v in resp.items() if v is None]
-        for k in stray:
-            del resp[k]
-            resp["description"] = f"{resp.get('description', '')}, {k}"
 
 
 def drop_org_header(params):
@@ -224,7 +216,6 @@ def main(src):
                     summary = ""
                 op["description"] = clean((summary + ".\n\n" + desc).strip() if summary else desc)
                 op["tags"] = [group]
-                mend_responses(op)
                 if "parameters" in op:
                     op["parameters"] = drop_org_header(op["parameters"])
                     if not op["parameters"]:
@@ -252,22 +243,12 @@ def main(src):
     for name in ("OrgHeader", "CSRFHeader"):
         comps.get("parameters", {}).pop(name, None)
 
-    # Hosts accept only the four sizes, in one region; the spec's ranges are wider.
-    sizes = "small 2 vCPU / 4096 MB / 50 GB, default 4 / 8192 / 50, large 8 / 16384 / 110, xlarge 16 / 32768 / 250"
+    # The spec describes any server's regions; the hosted API has one.
     for schema in ("CreateSandboxRequest", "CreateImageRequest"):
         props = comps["schemas"].get(schema, {}).get("properties", {})
-        if "vcpus" in props:
-            props["vcpus"] = {"type": "integer", "enum": [2, 4, 8, 16], "default": 2,
-                              "description": f"Picks the size: {sizes}. Other values give 400 `invalid_request`."}
-        if "ram_mb" in props:
-            props["ram_mb"] = {"type": "integer", "enum": [4096, 8192, 16384, 32768],
-                               "description": "Optional. Must match the size's RAM."}
-        if "disk_gb" in props:
-            props["disk_gb"] = {"type": "integer", "enum": [50, 110, 250],
-                                "description": "Optional. Must match the size's disk."}
         if "region" in props:
             props["region"] = {"type": "string", "enum": ["eu-central"], "default": "eu-central",
-                               "description": "`eu-central` is the only region today. US East is coming soon."}
+                               "description": "`eu-central` is the only region today; more will be added."}
 
     # Keep only the components the public routes reach.
     used, todo = set(), set()
