@@ -8,7 +8,7 @@ Zode bills two things: compute while a sandbox runs, and storage while it exists
 ## How billing accrues
 
 - **Compute** accrues per vCPU-hour, only while the sandbox is `running`, prorated to the second with no minimum. A 4 vCPU sandbox running for one hour uses 4 vCPU-hours. Every other status, including `stopped`, costs $0 compute.
-- **Storage** accrues per GB-month from creation until the sandbox is deleted, stopped or not. A month is a fixed 730 hours, and a GB is 10^9 bytes. Today storage is metered on the sandbox's provisioned disk size (50 GB for `small`), not on the bytes used.
+- **Storage** is free for the first 48 hours of every sandbox, forks included. After that it accrues per GB-month until the sandbox is deleted, stopped or not. A month is a fixed 730 hours, and a GB is 10^9 bytes. Storage is metered on the sandbox's provisioned disk size (50 GB for `small`), not on the bytes used.
 - **AI** calls through the host proxy are priced at the provider's list price and reported. You pay your provider; Zode adds nothing. See [Agents](/concepts/agents).
 
 Money in the API is integer micro-dollars: 1 USD = 1,000,000. Cents appear only on invoices.
@@ -17,13 +17,34 @@ Each UTC day closes one hour after midnight. A closed day is stored once and nev
 
 ### Included usage and credit
 
-Pro includes $20 of usage a month (no rollover). Free starts with a $10 credit once a card is saved. Included usage is used first, then credit, and both cover compute and storage, never the plan fee.
+Pro includes $20 of usage a month (no rollover). A new workspace has $0 of credit; saving its first card grants a one-time $10 credit. Included usage is used first, then credit, and both cover compute and storage, never the plan fee.
 
-Running out of either does not stop anything. Sandboxes keep running, and usage past what is included goes on that month's invoice. You can add credit or turn on auto top-up in Billing: when free credit falls below your threshold, Zode charges your card $5 to $1,000, at most three times a UTC day.
+What happens when credit runs out depends on whether the workspace has a card on file:
+
+- **With a card**, nothing stops. Sandboxes keep running, and usage past what is included goes on that month's invoice.
+- **Without a card**, once remaining credit is $0 or less, creating, forking and starting sandboxes fail with HTTP 402 `credit_exhausted`, and running sandboxes are stopped (hibernated, never deleted) within about 15 minutes. Add a card or buy credit in Billing to lift the block, then start them again. Enterprise is exempt.
+
+You can add credit or turn on auto top-up in Billing: when free credit falls below your threshold, Zode charges your card $5 to $1,000, at most three times a UTC day.
+
+### Low-balance events
+
+A `balance.low` event goes to your [alerts](/concepts/alerts) and [webhooks](/concepts/webhooks-and-telemetry) once when free credit drops below the workspace's low-balance threshold. The threshold is `caps.low_balance_micros` in `PATCH /v1/proxying/settings`, $2 by default. It fires again only after credit is back at or above the threshold. A workspace without a card also gets one each time its sandboxes are stopped for running out of credit.
+
+```json
+{
+  "reason": "No credit left and no payment method on file: 2 running sandbox(es) stopped, none deleted. Add a card or buy credit in Billing to start them again.",
+  "balance_micros": 0,
+  "threshold_micros": 2000000,
+  "exhausted": true,
+  "sandboxes_stopped": ["sbx_q3vfn7tkx2mhcw4a", "sbx_r7k2wbn6tdyx3lpe"]
+}
+```
+
+`sandboxes_stopped` is present only when sandboxes were stopped.
 
 ## Cap a sandbox
 
-`max_cost_micros` caps the AI spend of one sandbox. Set it at create or fork; a fork without one keeps its parent's.
+`max_cost_micros` caps the AI spend of one sandbox. It counts only AI calls the sandbox makes through Zode's AI proxy on the workspace's keys, never compute or storage. Set it at create or fork; a fork without one keeps its parent's. The host keeps the running total in memory, so a host restart starts it again from zero.
 
 <CodeGroup>
 
@@ -39,9 +60,13 @@ curl -s https://api.zode.dev/v1/sandboxes \
   -d '{"vcpus": 2, "max_cost_micros": 2000000}'
 ```
 
+```bash CLI
+zode new --max-cost 2
+```
+
 </CodeGroup>
 
-`zode new` has no flag for it; use the workspace default below.
+`zode new` and `zode fork` take `--max-cost` in dollars, such as `5` or `2.50`.
 
 When the sandbox's AI spend reaches the cap, the host refuses its next AI calls with HTTP 402 `zode_spend_cap`, and a `spend.cap_reached` event goes to your [alerts](/concepts/alerts) and [webhooks](/concepts/webhooks-and-telemetry) once. The sandbox keeps running and its compute is not counted against this cap.
 
@@ -85,7 +110,7 @@ REPO     BILLED      AI          HOURS
 
 Group with `--by repo|branch|pr|member|sandbox|model`, pick days with `--days N` or `--from YYYY-MM-DD --to YYYY-MM-DD`, and add `--csv` for one row per day and group. The default range is the last 7 UTC days, today included.
 
-Repo, branch and PR come from what you set on the sandbox (`git_repo`, `git_branch`, `pr_number`; `zode new --repo --branch`). Usage with none of them lands in the `(none)` group, so totals always add up. `model` groups AI spend as `provider/model`; compute and storage sit in the empty group.
+Repo, branch and PR come from what you set on the sandbox (`git_repo`, `git_branch`, `pr_number`; `zode new --repo --branch --pr`). Usage with none of them lands in the `(none)` group, so totals always add up. `model` groups AI spend as `provider/model`; compute and storage sit in the empty group.
 
 The API behind it:
 

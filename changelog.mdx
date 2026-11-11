@@ -3,7 +3,43 @@ title: "Changelog"
 description: "User-facing changes to Zode: the API, CLI, SDK, console and sandboxes, newest first."
 ---
 
-<Update label="2026-11-11" description="Capacity">
+<Update label="2026-11-11" description="Billing, API, CLI and SDK updates; capacity">
+**Billing**
+
+- Storage is free for the first 48 hours of every sandbox, forks included. After that it is billed on the provisioned disk as before. Compute prices are unchanged.
+- Running sandboxes needs a card on file or credit left. A workspace with neither gets 402 `credit_exhausted` on create, fork and start, and its running sandboxes are stopped (hibernated, never deleted) within about 15 minutes. New workspaces start with $0 of credit; saving the first card adds the $10 signup credit. Workspaces with a card keep running and are invoiced monthly. Enterprise is exempt. See [Pricing](/pricing#a-card-is-required-to-run-sandboxes).
+- A Pro trial now gets Pro's limits: 15 sandboxes running at once, 20 custom images kept and 2 building at once, and the desktop.
+- Enterprise keeps flight recorder data for 90 days.
+- The `balance.low`, `invoice.created`, `invoice.paid` and `invoice.payment_failed` webhooks and alerts are now sent. See [Webhooks](/concepts/webhooks-and-telemetry#event-types).
+
+**API**
+
+- `plan_required` is now always HTTP 402. It was 403 for the desktop on create, fork and `PATCH /v1/sandboxes/{id}/features`, and for workspace defaults in `PATCH /v1/org`.
+- 429 `rate_limited` answers carry `X-RateLimit-Limit`, `X-RateLimit-Remaining` and `X-RateLimit-Reset` next to `Retry-After`.
+- The OpenAPI spec lists every error `code` the API returns, validates cleanly, and documents the four sandbox sizes and the one region, `eu-central`. Codes stay an open set: handle unknown ones by HTTP status.
+- A sandbox created without a size is `small` (2 vCPU, 4 GB, 50 GB) in the API, CLI and MCP. The size named `default` is not the default.
+- Exec `env` is merged into the default environment, with your entries winning; it never replaced it, and the spec now says so.
+- Deleting a workspace answers `key_destroyed: false`: destroying the workspace key has not shipped yet.
+- Loop breaker alerts say the breaker "flagged a possible loop" unless the host enforces it.
+
+**CLI and MCP**
+
+- `zode exec` and `zode ssh` run a single command argument through `bash -lc`, so `zode exec demo -- 'npm ci && npm test'` works. Several arguments still run as argv. A missing program reads `command not found: X`.
+- `zode new` takes `--environment`, `--pr` and `--max-cost`. `zode fork` takes `--branch`, `--pr` and `--max-cost`.
+- `zode desktop` exits 1 when the desktop is off.
+- `zode image build -f` refuses a Dockerfile over 64 KB before uploading it.
+- The CLI says "API key" instead of "token", and `zode verify` failures no longer show host file paths.
+- The MCP `sandbox_create` tool takes `image`, `browser`, `desktop`, `git_repo`, `git_branch` and `pr_number`.
+
+**TypeScript SDK** (in the next npm release after 0.1.1)
+
+- `Sandbox.create({ image })` boots from a custom image.
+- `sbx.featureError` says why a browser or desktop asked for at create or fork did not start.
+- `sbx.restore(snap)` refuses another sandbox's snapshot with `wrong_sandbox`.
+- The missing-key error points to the console's API keys page.
+
+**Capacity**
+
 - A second host in `eu-central` adds room for more sandboxes.
 </Update>
 

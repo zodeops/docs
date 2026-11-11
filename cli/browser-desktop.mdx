@@ -52,14 +52,14 @@ If Chrome is off, the CLI says `the browser is off in demo: run zode browser dem
 
 ## Desktop
 
-The desktop is a Linux desktop in the sandbox. It is on the Pro, Team and Enterprise plans. On Free, switching it on fails with `the free plan does not include the desktop; upgrade in Billing`.
+The desktop is a Linux desktop in the sandbox. It is on the Pro, Team and Enterprise plans. On Free, switching it on fails with `the free plan does not include the desktop; upgrade in Billing`. A Pro trial includes it.
 
 ```bash
 zode desktop <sandbox> [--on | --off] [--json]
 zode desktop <sandbox> <action> [args] [flags]
 ```
 
-With no action, `zode desktop` prints the console URL of the live view (`https://console.zode.dev/sandboxes/sbx_.../desktop`) and opens it in your browser when stdout is a terminal. If the desktop is off, it prints the URL and a hint to run `--on`.
+With no action, `zode desktop` prints the console URL of the live view (`https://console.zode.dev/sandboxes/sbx_.../desktop`) and opens it in your browser when stdout is a terminal. If the desktop is off, it prints no URL and exits 1 with `zode: the desktop is off in demo: run zode desktop demo --on`.
 
 | Flag | Effect |
 |---|---|

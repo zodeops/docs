@@ -24,9 +24,26 @@ The 201 response includes `"secret": "whsec_..."`. It is shown once. `POST /v1/w
 | Sandbox | `sandbox.create`, `sandbox.fork`, `sandbox.start`, `sandbox.stop`, `sandbox.delete`, `sandbox.oom`, `sandbox.failed` |
 | Members and invites | `member.update`, `member.remove`, `member.leave`, `invite.create`, `invite.resend`, `invite.revoke`, `invite.accept` |
 | Workspace | `org.update`, `org.transfer` |
-| Spend | `breaker.tripped`, `spend.cap_reached`, `spend.daily_cap_reached` |
+| Spend | `breaker.tripped`, `spend.cap_reached`, `spend.daily_cap_reached`, `balance.low` |
+| Invoices | `invoice.created`, `invoice.paid`, `invoice.payment_failed` |
 
-`balance.low`, `invoice.created`, `invoice.paid` and `invoice.payment_failed` can be selected but are not sent yet. `GET /v1/webhooks` lists every type with `available`.
+`GET /v1/webhooks` lists every type with `available`.
+
+`balance.low` fires once when free credit drops below the workspace's low-balance threshold ($2 by default), and again each time sandboxes are stopped because credit ran out. Its `data` is `{reason, balance_micros, threshold_micros, exhausted, sandboxes_stopped?}`; see [Low-balance events](/concepts/spend-and-caps#low-balance-events).
+
+The invoice events follow your invoices: `invoice.created` when an invoice is issued, then `invoice.paid` or `invoice.payment_failed`. Their actor is `stripe`, and `data` is:
+
+```json
+{
+  "invoice_id": "in_...",
+  "number": "...",
+  "status": "open",
+  "amount_due_cents": 1250,
+  "amount_paid_cents": 0,
+  "currency": "usd",
+  "hosted_invoice_url": "https://invoice.stripe.com/i/..."
+}
+```
 
 ### What a delivery looks like
 

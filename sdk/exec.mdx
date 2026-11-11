@@ -25,7 +25,7 @@ A non-zero exit is a normal result, not an error. Pass `check: true` to throw a 
 | Option | Default | Notes |
 |---|---|---|
 | `cwd` | `/workspace` | Working directory |
-| `env` | none | `Record<string, string>` added on top of the sandbox's [environment](/sdk/environments); yours win on a clash |
+| `env` | none | `Record<string, string>` merged into the default environment and the sandbox's [environment](/sdk/environments), not a replacement for them; yours win on a clash |
 | `stdin` | none | `string` or `Uint8Array`, written then closed |
 | `timeoutMs` | see below | Deadline for the command |
 | `check` | `false` | Throw `CommandError` on a non-zero exit |
@@ -42,8 +42,14 @@ A non-zero exit is a normal result, not an error. Pass `check: true` to throw a 
 - **Streamed** over the attach WebSocket when you pass `onStdout` or `onStderr`, set `tty`, pass `stdin` as a `Uint8Array` or larger than 1 MiB, set `timeoutMs` above 55000, or set `maxOutputBytes`. There is no server-side time limit. `timeoutMs` is enforced by the SDK: it closes the session, which kills the process, and returns `timed_out: true` with `exit_code` -1. When you pass no `stdin`, the SDK closes stdin at once so commands that read it do not wait.
 
 <Warning>
-  A plain `exec("npm test")` uses the buffered route and is stopped after 30 s. For anything that may run longer, pass `timeoutMs` above 55000 or an output callback.
+  A bare `exec("npm test")` uses the buffered route, and the API kills it after 30 s: the result has `timed_out: true` and `exit_code` -1. For anything that may run longer, pass `timeoutMs` (up to 55000 stays buffered, more switches to the attach socket), pass an output callback, or use [`spawn`](#spawn).
 </Warning>
+
+```ts
+await sbx.exec("npm ci && npm test", { timeoutMs: 20 * 60_000 }); // over 55 s: runs over the attach socket
+await sbx.exec("make build", { onStdout: (b) => process.stdout.write(b) }); // streamed: no deadline unless timeoutMs
+const job = sbx.spawn("npm run dev"); // a live handle; no deadline by default
+```
 
 ```ts
 const r = await sbx.exec("npm ci && npm test", {

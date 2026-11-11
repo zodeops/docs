@@ -32,7 +32,7 @@ Secret values are encrypted at rest with AES-256-GCM, each under its own data ke
 
 ## API keys
 
-API keys start with `zode_tok_` and belong to one workspace. Zode stores only a SHA-256 hash of each key, so the key is shown once, when you create it. Create and revoke keys in the console under **Settings**, **API keys**, or through the API.
+API keys start with `zode_tok_` and belong to one workspace. Zode stores only a SHA-256 hash of each key, so the key is shown once, when you create it. Create and revoke keys in the console under **API keys** ([console.zode.dev/tokens](https://console.zode.dev/tokens)), or through the API.
 
 | Scope | What the key can call |
 |---|---|
@@ -55,7 +55,7 @@ Billing settings are changed by owners and the billing role; admins can read the
 
 ## Audit log
 
-Every change to a workspace writes an audit event: sandbox create, fork, stop, start, delete, exec and attach, browser and desktop connections, token, member and environment changes, and refused attempts. Each event has the actor (member and token), action, target, outcome, client IP and time. For `exec`, only the program name is recorded, never its arguments.
+Every change to a workspace writes an audit event: sandbox create, fork, stop, start, delete, exec and attach, browser and desktop connections, API key, member and environment changes, and refused attempts. Each event has the actor (member and API key), action, target, outcome, client IP and time. For `exec`, only the program name is recorded, never its arguments.
 
 Owners and admins read the log with `GET /v1/audit`. It filters by `actor`, `action` (a prefix such as `sandbox.`), `target`, `from` and `to` (a UTC day or RFC 3339 time), and pages with `limit` (1 to 500, default 50) and `before`. On the Team and Enterprise plans, `GET /v1/audit.csv` exports up to 50,000 rows.
 
@@ -88,6 +88,7 @@ Sandboxes, their disks, memory and snapshots stay on hosts in the `eu-central` r
 
 - Deleting a sandbox destroys its disk, saved memory and snapshots on the host.
 - Deleting a workspace revokes its API keys and deletes its remaining sandboxes. Only an owner can do it, every sandbox must be stopped or deleted first, and a personal workspace cannot be deleted.
+- Destroying the workspace's encryption key on delete has not shipped yet. The delete response says `key_destroyed: false`.
 - Flight recorder data is kept for your plan's retention (7, 30 or 90 days) and purged for deleted sandboxes.
 
 To report a security issue, email [hello@zode.dev](mailto:hello@zode.dev).

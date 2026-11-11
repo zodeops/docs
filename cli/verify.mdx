@@ -36,10 +36,10 @@ zode verify eu-central
 
 ```text
 eu-central host-f965c0a7: NOT verified
-  fail  the host has no signed release installed (no release manifest installed: open /etc/zode/host-release.json: no such file or directory)
+  fail  the host has no signed Zode release installed, so it cannot be verified (no release manifest installed: no such file or directory)
 
 eu-central host-1cf5d8bb: NOT verified
-  fail  the host has no signed release installed (no release manifest installed: open /etc/zode/host-release.json: no such file or directory)
+  fail  the host has no signed Zode release installed, so it cannot be verified (no release manifest installed: no such file or directory)
 ```
 
 Each host gets a heading line, then one line per result:
@@ -49,6 +49,8 @@ Each host gets a heading line, then one line per result:
 | `ok` | A check that passed. |
 | `fail` | The first check that failed. If the host claimed a class it could not prove, a second line says `the host claims <class>; do not send it secrets`. |
 | `note` | What the proven class does not cover. |
+
+Failure messages leave out file paths on the host; they only say what failed.
 | `log` | The Rekor entry on `https://search.sigstore.dev/?logIndex=N`. |
 
 A verified host's heading reads `<region> <host>: verified, signed_image, release <release>`.
@@ -70,7 +72,7 @@ zode verify eu-central --json
         "class": "none",
         "claimed": "none",
         "checks": null,
-        "problem": "the host has no signed release installed (...)"
+        "problem": "the host has no signed Zode release installed, so it cannot be verified (...)"
       }
     }
   ]

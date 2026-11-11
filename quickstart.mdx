@@ -5,6 +5,10 @@ description: "Install the zode CLI, make a sandbox, run a command in it, fork it
 
 You need a Zode account and a Linux or macOS machine (amd64 or arm64).
 
+<Note>
+  Save a card in the console under **Billing** before your first sandbox. A new workspace starts with $0 of credit, and a workspace with no card and no credit cannot create sandboxes (`credit_exhausted`). Saving your first card adds a one-time $10 credit. See [Pricing](/pricing#a-card-is-required-to-run-sandboxes).
+</Note>
+
 ## With the CLI
 
 <Steps>
@@ -20,7 +24,7 @@ You need a Zode account and a Linux or macOS machine (amd64 or arm64).
     zode login
     ```
 
-    `zode login` opens your browser and prints a code. Confirm the code in the browser, and the CLI saves a token for that workspace. `zode whoami` shows who and where you are signed in.
+    `zode login` opens your browser and prints a code. Confirm the code in the browser, and the CLI saves an API key for that workspace. `zode whoami` shows who and where you are signed in.
   </Step>
   <Step title="Make a sandbox">
     ```bash
@@ -66,7 +70,7 @@ You need a Zode account and a Linux or macOS machine (amd64 or arm64).
 
 ## From TypeScript or curl
 
-Both need an API key. Create one in the [console](https://console.zode.dev) under **Settings** > **API keys**, then export it:
+Both need an API key. Create one in the console under **API keys** ([console.zode.dev/tokens](https://console.zode.dev/tokens)), then export it:
 
 ```bash
 export ZODE_API_KEY=zode_tok_...
@@ -120,7 +124,7 @@ curl -sS -X DELETE $API/v1/sandboxes/$FORK -H "$AUTH"
 
 </CodeGroup>
 
-In the API and SDK you pick a size by `vcpus`: 2, 4, 8 or 16. RAM and disk follow the size. A string command runs under `bash -lc`. The buffered exec route stops a command after 55 seconds; for longer or interactive work, see [Sandboxes](/concepts/sandboxes#exec-and-attach).
+In the API and SDK you pick a size by `vcpus`: 2, 4, 8 or 16. RAM and disk follow the size, and leaving `vcpus` out gives `small`. A string command runs under `bash -lc`. The buffered exec route stops a command after 30 seconds by default and 55 seconds at most; for longer or interactive work, see [Sandboxes](/concepts/sandboxes#exec-and-attach).
 
 Errors come back as JSON with a stable code, for example:
 

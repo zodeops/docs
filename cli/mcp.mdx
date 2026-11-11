@@ -7,7 +7,7 @@ description: "Give Claude Code, Codex, Cursor or any MCP client tools to make sa
 
 ## Sign in first
 
-The server reads the same credentials as the CLI: the key saved by [`zode login`](/cli/overview#sign-in), or `ZODE_TOKEN` when set. With neither, it exits with `not signed in: run zode login first, then start your agent`.
+The server reads the same credentials as the CLI: the API key saved by [`zode login`](/cli/overview#sign-in), or the API key in `ZODE_TOKEN` when set. With neither, it exits with `not signed in: run zode login first, then start your agent`.
 
 ## Add it to your agent
 
@@ -49,7 +49,7 @@ Every `sandbox` parameter takes a sandbox name or `sbx_` id. Tools that return a
 | Tool | Parameters | Does |
 |---|---|---|
 | `sandbox_list` | none | Lists the workspace's sandboxes. |
-| `sandbox_create` | `name`, `size` (both optional) | Makes a sandbox. `size` is `small` (default), `default`, `large` or `xlarge`. Billed while running. |
+| `sandbox_create` | `name`, `size`, `image`, `browser`, `desktop`, `git_repo`, `git_branch`, `pr_number` (all optional) | Makes a sandbox. See [sandbox_create](#sandbox_create). Billed while running. |
 | `sandbox_exec` | `sandbox`, `command`, `cwd`, `stdin`, `timeout_seconds`, `env` | Runs a shell command and returns its result. |
 | `sandbox_read_file` | `sandbox`, `path` | Reads a text file, up to 256 KB. |
 | `sandbox_write_file` | `sandbox`, `path`, `content` | Writes a text file, creating parent directories. |
@@ -57,6 +57,17 @@ Every `sandbox` parameter takes a sandbox name or `sbx_` id. Tools that return a
 | `sandbox_stop` | `sandbox` | Hibernates it: memory and disk kept, compute billing stops. |
 | `sandbox_start` | `sandbox` | Wakes a stopped sandbox where it left off. |
 | `sandbox_delete` | `sandbox` | Deletes it and its disk. Cannot be undone. |
+
+### sandbox_create
+
+| Parameter | Type | Notes |
+|---|---|---|
+| `name` | string | Lowercase letters, digits and dashes. Picked for you when empty. |
+| `size` | string | `small`, `default`, `large` or `xlarge`. Left out, you get `small` (2 vCPU, 4 GB); the size named `default` is not the default. |
+| `image` | string | A ready custom image of the workspace, by name or `img_` id. It sets the size, so leave `size` empty. |
+| `browser` | boolean | Run Chrome, driven over CDP. Left out: the workspace default. |
+| `desktop` | boolean | Run a Linux desktop. Left out: the workspace default. Not on the Free plan. |
+| `git_repo`, `git_branch`, `pr_number` | string, string, integer | Labels for cost breakdowns. Nothing is cloned; use `sandbox_exec` for that. |
 
 ### sandbox_exec
 
@@ -77,6 +88,6 @@ It returns `exit_code`, `stdout`, `stderr`, `duration_ms`, and `timed_out` or `t
 
 ## Limits
 
-- `sandbox_create` makes plain sandboxes. For a custom image, a browser or a desktop, use [`zode new`](/cli/sandboxes) and give the agent the name.
+- `sandbox_create` has no environment or spend-cap input. For those, use [`zode new`](/cli/sandboxes) with `--environment` or `--max-cost` and give the agent the name.
 - The tools need a running sandbox for exec and files. A stopped one gives `demo is stopped; start it first`.
-- Plan limits apply as in the CLI: on Free, at most 2 sandboxes run at once.
+- Plan limits apply as in the CLI: on Free, at most 2 sandboxes run at once, and a workspace with no card and no credit cannot make sandboxes.

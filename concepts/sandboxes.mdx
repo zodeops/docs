@@ -41,7 +41,7 @@ Anything else returns HTTP 409 with code `invalid_state`, for example "sandbox i
 | `large` | 8 | 16 GB | 110 GB | $0.070 |
 | `xlarge` | 16 | 32 GB | 250 GB | $0.140 |
 
-The host accepts only these four. On the CLI, pass `--size`; without it you get `small` (the size named `default` is not the default). In the API and SDK, pass `vcpus` (2, 4, 8 or 16); RAM and disk follow. Any other combination returns 400 with the list of available sizes. A sandbox made from a [custom image](/concepts/images) has the image's size, and a fork has its parent's.
+The host accepts only these four. A sandbox made without a size is `small`, in the API, the SDK, the CLI and the MCP server. The size named `default` is not the default: you get 4 vCPU only when you ask for `default`. On the CLI, pass `--size`. In the API and SDK, pass `vcpus` (2, 4, 8 or 16); RAM and disk follow. Any other combination returns 400 with the list of available sizes. A sandbox made from a [custom image](/concepts/images) has the image's size, and a fork has its parent's.
 
 A sandbox's size does not change after it is made.
 
@@ -77,7 +77,7 @@ zode start demo     # demo is running
 zode rm demo        # demo deleted
 ```
 
-Storage is billed at $0.10 per GB-month from create until delete, whether the sandbox is running or stopped. Today it is measured on the sandbox's full disk size, so a `small` sandbox (50 GB) costs up to $5 a month in storage on top of its compute. Delete sandboxes you no longer need. See [Pricing](/pricing).
+Storage is free for the first 48 hours of every sandbox, forks included. After that it is billed at $0.10 per GB-month until delete, whether the sandbox is running or stopped. It is measured on the sandbox's full disk size, so a `small` sandbox (50 GB) costs $5 a month in storage on top of its compute once it is two days old. Delete sandboxes you no longer need. See [Pricing](/pricing).
 
 A stopped sandbox starts again on the same host. If that host has no free memory at that moment, start returns 409 `node_full`; try again shortly.
 
@@ -85,19 +85,19 @@ A stopped sandbox starts again on the same host. If that host has no free memory
 
 There are two ways to run something in a sandbox.
 
-**Buffered exec**, `POST /v1/sandboxes/{id}/exec`, runs one command and returns `exit_code`, `stdout`, `stderr` and `duration_ms` in one response. Pass `command` (a string, run under `bash -lc`) or `argv` (run as is). The working directory defaults to `/workspace`. Limits: 30 seconds by default and 55 seconds at most (`timeout_ms`), 16 KB of command, 1 MiB of `stdin`, and 1 MiB each of `stdout` and `stderr` (beyond that the response sets `stdout_truncated` or `stderr_truncated`).
+**Buffered exec**, `POST /v1/sandboxes/{id}/exec`, runs one command and returns `exit_code`, `stdout`, `stderr` and `duration_ms` in one response. Pass `command` (a string, run under `bash -lc`) or `argv` (run as is). The working directory defaults to `/workspace`. `env` entries are added to the default environment and the sandbox's environment; on a clash yours win. Limits: 30 seconds by default and 55 seconds at most (`timeout_ms`), 16 KB of command, 1 MiB of `stdin`, and 1 MiB each of `stdout` and `stderr` (beyond that the response sets `stdout_truncated` or `stderr_truncated`).
 
 **Attach**, `GET /v1/sandboxes/{id}/attach`, is a WebSocket that streams output both ways, supports a TTY and has no time limit. See [Attach](/api-reference/attach).
 
-The CLI uses attach for both `zode exec` and `zode ssh`. `zode exec` streams output and exits with the command's exit code. It runs the arguments after `--` as is, so wrap shell syntax in `bash -lc`:
+The CLI uses attach for both `zode exec` and `zode ssh`. `zode exec` streams output and exits with the command's exit code. With exactly one argument after `--`, the command runs through `bash -lc`, so quote shell syntax as one argument. With several arguments, they run as is, with no shell:
 
 ```bash
 zode exec demo -- npm test
-zode exec demo -- bash -lc 'ls /workspace | wc -l'
+zode exec demo -- 'ls /workspace | wc -l'
 zode exec -t demo -- top     # -t for a TTY
 ```
 
-The SDK's `exec()` uses the buffered route and switches to attach when you stream output, ask for a TTY, pass a timeout over 55 seconds or more than 1 MiB of stdin.
+The SDK's `exec()` uses the buffered route and switches to attach when you stream output, ask for a TTY, pass a timeout over 55 seconds or more than 1 MiB of stdin. A bare `exec()` with no timeout is killed after 30 seconds.
 
 If the kernel kills a command for running out of memory, the result says so (`oom_killed` and `peak_rss_mb` in the API; "killed: out of memory" from the CLI).
 
@@ -108,7 +108,7 @@ You can label a sandbox with the git repo, branch and pull request it works on. 
 <CodeGroup>
 
 ```bash CLI
-zode new fix-login --repo github.com/acme/web --branch fix/login
+zode new fix-login --repo github.com/acme/web --branch fix/login --pr 412
 ```
 
 ```ts TypeScript
@@ -128,11 +128,11 @@ curl -sS -X POST https://api.zode.dev/v1/sandboxes \
 
 </CodeGroup>
 
-The API fields are `git_repo` (up to 512 characters), `git_branch` (up to 255) and `pr_number` (positive). The CLI has `--repo` and `--branch` but no PR flag. A fork keeps its parent's repo; you can give it a new `git_branch` and `pr_number`. Labels cannot be changed after the sandbox is made.
+The API fields are `git_repo` (up to 512 characters), `git_branch` (up to 255) and `pr_number` (positive). The CLI flags are `--repo`, `--branch` and `--pr`. A fork keeps its parent's repo; you can give it a new `git_branch` and `pr_number` (`zode fork --branch B --pr N`). Labels cannot be changed after the sandbox is made.
 
 ## Per-sandbox spend cap
 
-`max_cost_micros` caps a sandbox's AI provider spend, in millionths of a dollar (`5000000` is $5). It counts model calls the sandbox makes through Zode's AI proxy that are paid by an API key. Calls made through a signed-in subscription are not counted.
+`max_cost_micros` caps a sandbox's AI provider spend, in millionths of a dollar (`5000000` is $5). It counts only model calls the sandbox makes through Zode's AI proxy that are paid by an API key. Compute, storage and calls made through a signed-in subscription are not counted.
 
 When the cap is reached, further model calls from that sandbox get HTTP 402 with code `zode_spend_cap`, and a `spend.cap_reached` alert fires. The sandbox keeps running, and its compute and storage are not counted against this cap.
 
@@ -141,12 +141,13 @@ When the cap is reached, further model calls from that sandbox get HTTP 402 with
 - The cap is set at create or fork and cannot be changed afterwards.
 - The host keeps the running total in memory, so a host restart resets it.
 
-The CLI has no flag for it; use the SDK (`maxCostMicros`) or the API. Workspace-wide daily caps are on [Spend and caps](/concepts/spend-and-caps).
+On the CLI, pass `--max-cost` in dollars to `zode new` or `zode fork`; in the SDK, `maxCostMicros`. Workspace-wide daily caps are on [Spend and caps](/concepts/spend-and-caps).
 
 ## Limits
 
-- **Running at once**: Free 2, Pro 15, Team 50. Sandboxes that are `creating`, `running` or `starting` count; stopped ones do not. Over the limit, create, fork and start return 409 `concurrency_limit`.
-- **Create rate**: creates and forks are limited to 30 an hour per user, 60 an hour per workspace and 60 an hour per client IP. Over it you get 429 `rate_limited` with a `Retry-After` header.
+- **Running at once**: Free 2, Pro 15, Team 50; a Pro trial gets Pro's 15. Sandboxes that are `creating`, `running` or `starting` count; stopped ones do not. Over the limit, create, fork and start return 409 `concurrency_limit`.
+- **Credit**: a workspace with no card on file and no credit left cannot create, fork or start sandboxes (402 `credit_exhausted`), and its running sandboxes are stopped. See [Pricing](/pricing#a-card-is-required-to-run-sandboxes).
+- **Create rate**: creates and forks are limited to 30 an hour per user, 60 an hour per workspace and 60 an hour per client IP. Over it you get 429 `rate_limited` with `Retry-After` and `X-RateLimit-*` headers.
 - **Daily cap**: if your workspace has a daily spend cap and today's spend (UTC) has reached it, create, fork and start return 409 `daily_cap_reached`.
 - **Same host**: a fork runs on its parent's host, and a stopped sandbox starts on its own host. When that host has no free memory you get 409 `node_full`.
 - **Free plan**: a sandbox that averages 90% CPU or more for an hour, or that looks like it is scanning the network, is stopped. So are the workspace's running sandboxes once it sends more than 10 GiB out in a UTC day.

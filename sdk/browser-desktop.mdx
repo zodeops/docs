@@ -18,10 +18,21 @@ await sbx.browser.disable();
 
 Left out, `create` uses the workspace default and `fork` copies the parent. `enable()` and `disable()` resolve with the updated sandbox. `enabled` reads the record as of the last call; call `sbx.refresh()` to re-read it.
 
+If the host cannot switch on a feature you asked for at create or fork, the call still succeeds and `sbx.featureError` holds the reason. On a create that feature stays off; on a fork it keeps the parent's value. Retry with `enable()`. The next call that re-reads the record clears `featureError`.
+
+```ts
+const sbx = await Sandbox.create({ browser: true, desktop: true });
+if (sbx.featureError) console.warn(sbx.featureError);
+```
+
+<Note>
+  `featureError` was added after `@zodedev/sdk` 0.1.1 and ships in the next npm release. In 0.1.1 the API's `feature_error` field is in `sbx.record` right after the create or fork, but not in its type: read it as `(sbx.record as { feature_error?: string }).feature_error`.
+</Note>
+
 | Error | When |
 |---|---|
 | `invalid_state` (409) | The sandbox is not running |
-| `plan_required` (403) | The plan does not include it: the desktop on Free |
+| `plan_required` (402) | The plan does not include it: the desktop on Free |
 | `feature_unavailable` (501) | The sandbox's host cannot run it yet |
 | `node_error` (502) | The host did not start it; the message says why |
 

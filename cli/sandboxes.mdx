@@ -27,14 +27,17 @@ Leave out the name and the API picks one. Names use lowercase letters, digits an
 
 | Flag | Effect |
 |---|---|
-| `--size S` | `small`, `default`, `large` or `xlarge`. Without it you get **small**. |
+| `--size S` | `small`, `default`, `large` or `xlarge`. Without it you get **small**; the size named `default` is not the default. |
 | `--image IMG` | Start from a [custom image](/cli/images), by name or `img_` id. The image sets the size, so you cannot combine it with `--size`. |
 | `--browser` | Run Chrome in the sandbox from the start. See [Browser and desktop](/cli/browser-desktop). |
 | `--desktop` | Run a Linux desktop from the start. Not on the Free plan. |
+| `--environment ENV` | The [environment](/concepts/environments-and-secrets), by name or `env_` id, whose variables and secrets the sandbox reads. Default: the workspace's `default`. |
 | `--repo URL` | Label the sandbox with a git repo. `zode cost --by repo` groups by it. |
-| `--branch NAME` | Label the sandbox with a git branch. `zode cost --by branch` groups by it. |
+| `--branch NAME` | Label the sandbox with a git branch, up to 255 characters. `zode cost --by branch` groups by it. |
+| `--pr N` | Label the sandbox with a pull request number. `#42` works too. `zode cost --by pr` groups by it. |
+| `--max-cost USD` | Cap the sandbox's AI spend, in dollars, such as `5` or `2.50` (more than $0, up to six decimals). See [Spend and caps](/concepts/spend-and-caps#cap-a-sandbox). |
 
-`--repo` and `--branch` are labels; they do not clone anything. Leave out `--browser` or `--desktop` and the workspace default applies; `--browser=false` turns it off explicitly.
+`--repo`, `--branch` and `--pr` are labels; they do not clone anything. Leave out `--browser` or `--desktop` and the workspace default applies; `--browser=false` turns it off explicitly.
 
 | Size | vCPU | RAM | Disk |
 |---|---|---|---|
@@ -55,13 +58,15 @@ demo is running (large, 8 vCPU, 16 GB, eu-central) in 1.6s
 
 On the Free plan you can run 2 sandboxes at once. A third `zode new` fails with `Your free plan runs at most 2 sandboxes at once. Stop one first.`
 
+A workspace with no card on file and no credit left cannot make, fork or start sandboxes until someone adds a card or credit in **Billing**. See [Pricing](/pricing#a-card-is-required-to-run-sandboxes).
+
 ## Open a shell
 
 ```bash
 zode ssh <sandbox> [-- cmd ...]
 ```
 
-Without a command you get a root login shell (`bash -l`) in `/workspace`. When your stdin and stdout are a terminal, the session gets a TTY and follows your window size. With `-- cmd`, it runs that command instead. `zode ssh` takes the same `-e` and `--env-file` flags as `zode exec`, placed before the sandbox name.
+Without a command you get a root login shell (`bash -l`) in `/workspace`. When your stdin and stdout are a terminal, the session gets a TTY and follows your window size. With `-- cmd`, it runs that command instead, the same way as [`zode exec`](#run-a-command): one argument runs through `bash -lc`, several run as is. `zode ssh` takes the same `-e` and `--env-file` flags as `zode exec`, placed before the sandbox name.
 
 ## Run a command
 
@@ -80,13 +85,18 @@ zode exec [-t] [-e KEY=VALUE] [-e KEY] [--env-file FILE] <sandbox> -- cmd [args.
 
 The variables go on top of the sandbox's [environment](/concepts/environments-and-secrets) and travel in a header, not the URL.
 
-The command runs as given, without a shell. For pipes, `&&` or globs, run a shell yourself:
+How the command runs depends on how many arguments follow `--`:
+
+- **Exactly one argument** runs through `bash -lc`, so pipes, `&&`, globs and variables work. Quote the whole command line as one argument.
+- **Several arguments** run as argv, as given, with no shell.
 
 ```bash
-zode exec demo -- bash -lc 'npm ci && npm test'
+zode exec demo -- 'npm ci && npm test'
 zode exec -e NODE_ENV=test --env-file .env demo -- npm test
 cat data.json | zode exec demo -- python3 -m json.tool
 ```
+
+With several arguments, a program that does not exist gives `zode: command not found: X`, and one that is not executable gives `zode: permission denied: X`. With one argument, bash reports it and the command exits 127 or 126, as in any shell.
 
 stdin: piped input is streamed to the command. If your stdin is a terminal and you did not pass `-t`, the command gets end-of-file at once, so commands that read stdin do not hang. Without a TTY, Ctrl-C sends `INT` to the remote command instead of dropping the connection.
 
@@ -95,10 +105,10 @@ If the kernel kills the command for running out of memory, `zode` prints `zode: 
 ## Fork
 
 ```bash
-zode fork <sandbox> [name] [--browser[=false]] [--desktop[=false]]
+zode fork <sandbox> [name] [--browser[=false]] [--desktop[=false]] [--branch B] [--pr N] [--max-cost USD]
 ```
 
-The copy has the parent's memory, running processes and disk, and keeps its size, region and repo. Browser and desktop follow the parent unless you pass the flags. Flags can go anywhere on the line.
+The copy has the parent's memory, running processes and disk, and keeps its size, region, repo and environment. Browser and desktop follow the parent unless you pass the flags. `--branch`, `--pr` and `--max-cost` replace the parent's branch label, PR label and AI spend cap, with the same rules as on `zode new`. Flags can go anywhere on the line.
 
 ```bash
 zode fork demo demo-try-2 --browser=false
@@ -125,4 +135,4 @@ demo is running
 demo deleted
 ```
 
-A stopped sandbox still pays for storage. `zode rm` cannot be undone. See [Sandboxes](/concepts/sandboxes) for the full lifecycle.
+A stopped sandbox still pays for storage once it is 48 hours old. `zode rm` cannot be undone. See [Sandboxes](/concepts/sandboxes) for the full lifecycle.

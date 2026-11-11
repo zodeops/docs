@@ -87,12 +87,14 @@ curl -s https://api.zode.dev/v1/alerts/rules \
 | `sandbox.abuse_stopped` | yes | Zode stopped a sandbox for suspected abuse |
 | `sandbox.failed` | no | a sandbox's VM exited unexpectedly |
 | `sandbox.abuse_flagged` | no | Zode flagged a sandbox for suspected abuse |
-| `balance.low` | no | the credit balance runs low (not sent yet) |
+| `balance.low` | no | free credit dropped below the low-balance threshold, or ran out and sandboxes were stopped |
 | `member.joined`, `member.left`, `member.removed`, `member.role_changed` | no | membership changes |
 | `api_key.created` | no | someone created an API key |
 | `workspace.transferred` | no | ownership was transferred |
 
 `GET /v1/alerts` returns this list with each type's `critical` flag and `source`.
+
+Hosts run the loop breaker in report mode today, so a `breaker.tripped` alert reads "Loop breaker flagged a possible loop in …" and adds "Nothing was paused: the agent keeps running". Only a host that enforces the breaker sends "Loop breaker paused the agent in …".
 
 Each rule sends at most once per event per channel, so a repeated event sends nothing new.
 

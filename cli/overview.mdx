@@ -59,7 +59,7 @@ Sign-in creates an API key for your member in that workspace. The CLI saves it, 
 you@example.com (owner) in acme, via https://api.zode.dev
 ```
 
-`zode logout` removes the key from this machine. The key itself stays valid until you revoke it in the console under **Settings**, **API keys**.
+`zode logout` removes the API key from this machine. The key itself stays valid until you revoke it in the console under **API keys** ([console.zode.dev/tokens](https://console.zode.dev/tokens)).
 
 ## Environment variables
 
@@ -83,7 +83,7 @@ Every command that takes `<sandbox>` accepts its name or its `sbx_` id. If two s
 | `2` | No command, an unknown command, or bad `zode verify` usage. |
 | command's code | `zode ssh` and `zode exec` exit with the remote command's exit code. A process killed by a signal gives `255`. |
 
-A revoked or missing key prints `zode: not signed in, or the token was revoked: run zode login`.
+A revoked or missing key prints `zode: not signed in, or the API key was revoked: run zode login`.
 
 ## Commands
 
@@ -97,7 +97,7 @@ A revoked or missing key prints `zode: not signed in, or the token was revoked: 
 | `zode fork <sandbox> [name]` | Copy a sandbox, memory and disk included | [Sandboxes](/cli/sandboxes) |
 | `zode stop`, `start`, `rm` | Hibernate, wake, delete | [Sandboxes](/cli/sandboxes) |
 | `zode browser <sandbox>` | Print a CDP endpoint for Chrome | [Browser and desktop](/cli/browser-desktop) |
-| `zode desktop <sandbox>` | Open, screenshot and drive the Linux desktop | [Browser and desktop](/cli/browser-desktop) |
+| `zode desktop <sandbox>` | Open, screenshot and drive the Linux desktop. Exits 1 when the desktop is off | [Browser and desktop](/cli/browser-desktop) |
 | `zode image build`, `ls`, `logs`, `rm` | Build and manage custom images | [Images](/cli/images) |
 | `zode cost` | Usage and cost of the workspace | [Cost](/cli/cost) |
 | `zode verify <sandbox\|region>` | Check a host's signed release yourself | [Verify](/cli/verify) |
