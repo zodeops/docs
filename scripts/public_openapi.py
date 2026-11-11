@@ -238,7 +238,8 @@ def main(src):
     schemes = comps.get("securitySchemes", {})
     comps["securitySchemes"] = {"bearerAuth": schemes["bearerAuth"]}
     comps["securitySchemes"]["bearerAuth"]["description"] = (
-        "An API key (`zode_tok_...`). Create one in the console under Settings, API keys, or with `zode login`."
+        "An API key (`zode_tok_...`). Create one in the console under API keys "
+        "(https://console.zode.dev/tokens), or with `zode login`."
     )
     for name in ("OrgHeader", "CSRFHeader"):
         comps.get("parameters", {}).pop(name, None)

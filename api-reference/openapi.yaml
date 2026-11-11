@@ -5370,8 +5370,8 @@ components:
       type: http
       scheme: bearer
       bearerFormat: zode_tok_<64 hex chars>
-      description: An API key (`zode_tok_...`). Create one in the console under Settings, API keys, or
-        with `zode login`.
+      description: An API key (`zode_tok_...`). Create one in the console under API keys (https://console.zode.dev/tokens),
+        or with `zode login`.
   parameters:
     AttestNonce:
       name: nonce

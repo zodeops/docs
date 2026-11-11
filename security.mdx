@@ -55,7 +55,7 @@ Billing settings are changed by owners and the billing role; admins can read the
 
 ## Audit log
 
-Every change to a workspace writes an audit event: sandbox create, fork, stop, start, delete, exec and attach, browser and desktop connections, token, member and environment changes, and refused attempts. Each event has the actor (member and token), action, target, outcome, client IP and time. For `exec`, only the program name is recorded, never its arguments.
+Every change to a workspace writes an audit event: sandbox create, fork, stop, start, delete, exec and attach, browser and desktop connections, API key, member and environment changes, and refused attempts. Each event has the actor (member and API key), action, target, outcome, client IP and time. For `exec`, only the program name is recorded, never its arguments.
 
 Owners and admins read the log with `GET /v1/audit`. It filters by `actor`, `action` (a prefix such as `sandbox.`), `target`, `from` and `to` (a UTC day or RFC 3339 time), and pages with `limit` (1 to 500, default 50) and `before`. On the Team and Enterprise plans, `GET /v1/audit.csv` exports up to 50,000 rows.
 
