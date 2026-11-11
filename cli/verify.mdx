@@ -1,0 +1,101 @@
+---
+title: "Verify"
+description: "Check a host's signed release and its Rekor transparency-log entry yourself with zode verify."
+---
+
+<Warning>
+Signed host releases are rolling out. Today no host has one installed, so `zode verify` reports every host as **not verified** and exits 1. Do not treat sandboxes as attested yet.
+</Warning>
+
+```bash
+zode verify <sandbox | region> [--json]
+zode verify --manifest FILE --bundle FILE
+```
+
+`zode verify` asks the API what a host reports about itself, then checks that report on your machine. The API only relays the report; the CLI does not trust the API's own verdict. Background: [Attestation](/concepts/attestation).
+
+## What it checks
+
+For a sandbox, the CLI checks the host it runs on. For a region such as `eu-central`, it checks every active host in it. A name that is not one of your sandboxes is tried as a region.
+
+The CLI sends a fresh random nonce, then checks, in order:
+
+1. The release manifest matches the digest the host reports.
+2. The manifest is signed by the Zode release key built into the CLI.
+3. The signature is in the Rekor transparency log, with an inclusion proof against a signed checkpoint. The Sigstore trusted root is also built into the CLI.
+4. The files the host measured match the files the release lists.
+5. On a host with a TPM: a TPM quote over the boot measurements, made with your nonce, so it cannot be replayed.
+
+A host that passes steps 1 to 4 is `signed_image`: the files match, but the host itself reports them. A host whose TPM quote also checks out, with an enrolled TPM key, is `tpm_quoted`. TPM key enrollment has not shipped, so the best class today is `signed_image`. A host that fails any step is `none`.
+
+## Output today
+
+```bash
+zode verify eu-central
+```
+
+```text
+eu-central host-f965c0a7: NOT verified
+  fail  the host has no signed release installed (no release manifest installed: open /etc/zode/host-release.json: no such file or directory)
+
+eu-central host-1cf5d8bb: NOT verified
+  fail  the host has no signed release installed (no release manifest installed: open /etc/zode/host-release.json: no such file or directory)
+```
+
+Each host gets a heading line, then one line per result:
+
+| Prefix | Meaning |
+|---|---|
+| `ok` | A check that passed. |
+| `fail` | The first check that failed. If the host claimed a class it could not prove, a second line says `the host claims <class>; do not send it secrets`. |
+| `note` | What the proven class does not cover. |
+| `log` | The Rekor entry on `https://search.sigstore.dev/?logIndex=N`. |
+
+A verified host's heading reads `<region> <host>: verified, signed_image, release <release>`.
+
+## JSON
+
+```bash
+zode verify eu-central --json
+```
+
+```json
+{
+  "hosts": [
+    {
+      "host": "host-f965c0a7",
+      "region": "eu-central",
+      "verdict": {
+        "ok": false,
+        "class": "none",
+        "claimed": "none",
+        "checks": null,
+        "problem": "the host has no signed release installed (...)"
+      }
+    }
+  ]
+}
+```
+
+`verdict` fields: `ok`, `class` (what was proven), `claimed` (what the host said), `release`, `manifest_digest`, `log` (`log`, `log_url`, `log_index`, `tree_size`, `root_hash`, `integrated_time`, `set`), `checks`, `limits` and `problem`. Empty optional fields are left out, and `checks` is `null` when no step passed.
+
+## Check a release offline
+
+To audit a release without a host, pass the manifest and its Sigstore bundle:
+
+{/* untested */}
+```bash
+zode verify --manifest host-release.json --bundle host-release.bundle.json
+```
+
+This checks the signature and the transparency-log entry only. It does not show that any host runs the release.
+
+## Exit codes
+
+| Code | When |
+|---|---|
+| `0` | Every host verified. |
+| `1` | At least one host did not verify, or the request failed. |
+| `2` | Bad usage, such as no argument or `--manifest` without `--bundle`. |
+
+`ZODE_RELEASE_KEY` names a PEM file of release keys to use instead of the built-in key, for testing a staging release. The CLI prints a warning on stderr when it is set.

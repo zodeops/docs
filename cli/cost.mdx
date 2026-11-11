@@ -1,0 +1,90 @@
+---
+title: "Cost"
+description: "See what your workspace spent, by day range and grouped by repo, branch, PR, member, sandbox or model, with zode cost."
+---
+
+```bash
+zode cost [--days N | --from YYYY-MM-DD [--to YYYY-MM-DD]] [--by GROUP] [--csv]
+```
+
+`zode cost` reports usage and cost for whole UTC days. It reads the same numbers as the **Usage** page in the console.
+
+| Flag | Effect |
+|---|---|
+| `--days N` | The last `N` UTC days, today included. 1 to 92. Default 7. |
+| `--from DAY` | First UTC day. When set, `--days` is ignored. |
+| `--to DAY` | Last UTC day, inclusive. Default today. |
+| `--by GROUP` | Group rows by `repo` (default), `branch`, `pr`, `member`, `sandbox` or `model`. |
+| `--csv` | Print CSV, one row per day and group, instead of the summary. |
+
+A range covers at most 92 days.
+
+## Output
+
+```bash
+zode cost
+```
+
+```text
+2026-11-05 to 2026-11-11 UTC, as of 2026-11-11 11:02
+
+billed      $0.005048   compute $0.002804   storage $0.002244
+AI          $0.000000 in 0 calls, shown, not billed
+sandboxes   0.160 h, peak 2 at once, 5 forks (p95 17876 ms)
+events      0 OOM kills, 0 breaker trips
+
+REPO     BILLED      AI          HOURS
+(none)   $0.005048   $0.000000   0.160
+```
+
+| Line | Meaning |
+|---|---|
+| `billed` | What you pay: compute plus storage, and static IPs when you have any. |
+| `AI` | Spend on AI providers through your own keys. Shown per group, never billed. It reads `unknown` when no flight recorder is connected. |
+| `sandboxes` | Sandbox-hours, the most sandboxes running at once, the number of forks and their 95th-percentile fork time. |
+| `events` | Out-of-memory kills and circuit-breaker trips, when known. |
+
+Amounts are exact to the micro-dollar ($0.000001). Compute is billed per second while a sandbox runs; storage is billed while it exists, running or stopped. Rates are on [Pricing](/pricing).
+
+Sandboxes with no repo label fall under `(none)`. Set the label with `zode new --repo`.
+
+## Group by sandbox
+
+```bash
+zode cost --by sandbox
+```
+
+```text
+SANDBOX                BILLED      AI          HOURS
+demo                   $0.004310   $0.000000   0.140
+sbx_olsyt6t2clv4abhc   $0.000287   $0.000000   0.010
+sbx_e7jvfyy2kpstjbjo   $0.000164   $0.000000   0.005
+sbx_ctpwkgkzax7nkmln   $0.000120   $0.000000   0.004
+...
+```
+
+The summary lines above the table are the same for every grouping. Live sandboxes show by name; deleted ones show by id.
+
+| `--by` | Row label |
+|---|---|
+| `repo` | The sandbox's repo label |
+| `branch` | `repo@branch` |
+| `pr` | `repo#123` |
+| `member` | The member who made the sandbox |
+| `sandbox` | Sandbox name, or id once deleted |
+| `model` | The AI model. Compute and storage have no model, so they sit under `(none)`. |
+
+## CSV
+
+```bash
+zode cost --days 2 --csv
+```
+
+```text
+day,repo,sandbox_hours,compute_micros,storage_micros,static_ip_micros,billable_micros,ai_micros_not_billed,ai_calls
+2026-11-11,,0.188,3293,2891,0,6184,0,0
+```
+
+The second column is named after `--by` and is empty for usage with no label. Money columns are integer micro-dollars: divide by 1,000,000 for USD. `billable_micros` is compute plus storage plus static IP. Cells that start like a spreadsheet formula are escaped.
+
+For the same data over HTTP, call `GET /v1/usage` or `GET /v1/usage.csv`; see the [API overview](/api-reference/overview).

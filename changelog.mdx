@@ -1,0 +1,64 @@
+---
+title: "Changelog"
+description: "User-facing changes to Zode: the API, CLI, SDK, console and sandboxes, newest first."
+---
+
+<Update label="2026-11-11" description="Capacity">
+- A second host in `eu-central` adds room for more sandboxes.
+</Update>
+
+<Update label="2026-11-10" description="SDK on npm, new desktop view">
+- `@zodedev/sdk` is on npm under the Apache-2.0 licence. The current version is 0.1.1. See [TypeScript SDK](/sdk/overview).
+- The desktop's live view is now a page you embed in an iframe (`POST /v1/sandboxes/{id}/desktop/session`, `desktop.viewUrl()` in the SDK). It is watch-only unless you ask for `control`, and it replaces the earlier WebRTC stream.
+- Chrome and the desktop run as the `zode` user. Chrome keeps its own sandbox and no longer shows the `--no-sandbox` warning bar.
+- Chrome starts with sign-in, sync, password saving and translate prompts turned off.
+- The desktop has accessibility (AT-SPI) on, CJK fonts, and the agent-browser and agent-desktop tools installed.
+- Switching the browser and the desktop on at the same time no longer leaves Chrome headless.
+</Update>
+
+<Update label="2026-11-09" description="Browser, desktop, custom images, plan limits">
+- Sandboxes can run Chrome, driven over CDP, and a Linux desktop. Each is a switch: `browser` and `desktop` on create and fork, or `PATCH /v1/sandboxes/{id}/features`. The desktop needs Pro, Team or Enterprise.
+- CDP URLs now connect straight to the sandbox's host.
+- Custom images: `zode image build` from a Dockerfile or a list of commands, then boot sandboxes from the image.
+- First version of the TypeScript SDK.
+- `zode verify` checks a host's signed release against the Rekor transparency log. Hosts do not have signed releases installed yet, so it reports them as not verified.
+- Plans now limit sandboxes running at once: Free 2, Pro 15, Team 50. Over the limit, create, fork and start fail with `concurrency_limit`.
+- Sandbox creates and forks are rate-limited per person and per workspace (`rate_limited`).
+- Sign-up refuses throwaway email domains.
+- Spend caps live in one place, **Billing**. The daily cap and the per-sandbox default set there apply everywhere.
+- Free workspaces can start a 7-day Pro trial with no card. Promo codes can be redeemed in **Billing**.
+- New agent harnesses: pi and Kimi Code. Amazon Bedrock, Vertex AI and DeepSeek work through the AI proxy.
+- `GET /v1/concurrency` shows how many sandboxes count against the plan limit.
+- Console: a running-sandbox counter, Cmd+K search, a status page backed by `GET /v1/status`, a Support link, a new sign-in page and a theme switcher.
+- AI agents can sign in to Zode as themselves with AgentID.
+- Fixed: Claude subscription sign-in hung after a refused code.
+- Fixed: a subscription sign-in in progress was lost when the API restarted.
+</Update>
+
+<Update label="2026-11-08" description="Real sandboxes, CLI, MCP, workspaces">
+- Sandboxes run as Cloud Hypervisor microVMs in four sizes, with `POST /v1/sandboxes/{id}/exec` and a **Shell** tab in the console.
+- The `zode` CLI: `login`, `new`, `ls`, `ssh`, `exec`, `fork`, `stop`, `start` and `rm`, with real interactive shells.
+- `zode mcp` runs an MCP server on stdio for Claude Code, Codex and other agents.
+- Every sandbox has a full dev stack: PostgreSQL and Redis running, Docker, Node 22 with pnpm and yarn, Bun, Python, Go, Rust, SQLite, `gh`, Chrome, Claude Code and Codex.
+- `zode exec` and `zode ssh` take `-e KEY=VALUE` and `--env-file`.
+- A sandbox created without a name gets one such as `brave-hopper`.
+- Secrets are swapped in on the way out by the host's egress proxy, so sandboxes never see their values.
+- Snapshots save disk and memory together; the console can take, restore and delete them.
+- Use your Claude or ChatGPT subscription for Claude Code and Codex in sandboxes.
+- Workspaces with roles, team members and invites.
+- Console pages for account, environments, agents, CI, webhooks and OpenTelemetry export, alerts, billing and usage.
+- `GET /v1/sandboxes` filters by `status`, `region` and `created_by`, and every sandbox records who created it.
+- Flight recorder routes: `GET /v1/sandboxes/{id}/timeline` and `/stats`.
+- Console sign-in with email and password, email links and Google, plus privacy and terms pages.
+- Fixed: `zode exec` sometimes printed a read error instead of the command's exit code.
+- Fixed: an out-of-memory kill ended the whole session. The CLI now reports `killed: out of memory` and the sandbox keeps working.
+</Update>
+
+<Update label="2026-11-07" description="First API and console">
+- The API is live at `https://api.zode.dev`, with an audit event for every change and a published OpenAPI spec.
+- The console is live at `console.zode.dev`, with GitHub sign-in and device approval for CLI sign-in.
+- Usage is metered in micro-dollars against versioned prices, with plans and prepaid credit.
+- Spend caps, a loop breaker for stuck agents, and alerts for out-of-memory kills.
+- The flight recorder samples each sandbox's CPU and memory every second and records its processes.
+- The AI proxy tries workspace keys in order when one is rate-limited.
+</Update>

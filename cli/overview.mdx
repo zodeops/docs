@@ -1,0 +1,107 @@
+---
+title: "CLI overview"
+description: "Install the zode CLI, sign in through the browser, and find every command."
+---
+
+The `zode` CLI makes sandboxes, opens shells in them, runs commands, and reports cost. It is a single binary.
+
+## Install
+
+```bash
+curl -fsSL https://zode.dev/install | sh
+```
+
+The script supports Linux and macOS on amd64 and arm64. It downloads the binary for your system, checks it against the published SHA-256 sums, and refuses to install on a mismatch.
+
+It installs to `/usr/local/bin` when that directory is writable, otherwise to `~/.local/bin`. If the directory is not on your `PATH`, the script prints the `export` line to add. Set `ZODE_INSTALL_DIR` to pick the directory yourself:
+
+```bash
+curl -fsSL https://zode.dev/install | ZODE_INSTALL_DIR="$HOME/bin" sh
+```
+
+Check the install:
+
+```bash
+zode version
+```
+
+```text
+zode 5952024 darwin/arm64
+```
+
+## Sign in
+
+`zode login` uses a device flow. It prints a URL and a code, opens the browser when it can, and waits while you confirm the code in the console.
+
+{/* untested */}
+```bash
+zode login
+```
+
+```text
+Open https://console.zode.dev/device?code=BKMT-QRWX
+and confirm the code BKMT-QRWX
+Waiting for approval... done.
+Signed in to acme. Try: zode new
+```
+
+The code is good for 15 minutes. On a Linux machine with no display, the CLI does not open a browser; open the URL on any other device. `zode login --api URL` signs in against a different API origin and saves it.
+
+Sign-in creates an API key for your member in that workspace. The CLI saves it, with the API origin and workspace name, in `zode/config.json` under your user config directory, with file mode `0600`:
+
+| OS | Path |
+|---|---|
+| macOS | `~/Library/Application Support/zode/config.json` |
+| Linux | `$XDG_CONFIG_HOME/zode/config.json`, default `~/.config/zode/config.json` |
+
+`zode whoami` shows who you are signed in as:
+
+```text
+you@example.com (owner) in acme, via https://api.zode.dev
+```
+
+`zode logout` removes the key from this machine. The key itself stays valid until you revoke it in the console under **Settings**, **API keys**.
+
+## Environment variables
+
+| Variable | Effect |
+|---|---|
+| `ZODE_TOKEN` | API key to use instead of the saved sign-in (`zode_tok_...`). Use it in CI. |
+| `ZODE_API` | API origin instead of the saved one. Default `https://api.zode.dev`. |
+| `ZODE_CONSOLE_URL` | Console origin that `zode desktop` links to. Default: the API host with `api.` swapped for `console.`, else `https://console.zode.dev`. |
+| `ZODE_INSTALL_DIR` | Install directory for the install script. |
+
+## Naming a sandbox
+
+Every command that takes `<sandbox>` accepts its name or its `sbx_` id. If two sandboxes share a name, the CLI refuses and asks for the id. `zode ls` lists both.
+
+## Exit codes
+
+| Code | When |
+|---|---|
+| `0` | The command succeeded. |
+| `1` | Any error. The message goes to stderr, prefixed `zode:`. |
+| `2` | No command, an unknown command, or bad `zode verify` usage. |
+| command's code | `zode ssh` and `zode exec` exit with the remote command's exit code. A process killed by a signal gives `255`. |
+
+A revoked or missing key prints `zode: not signed in, or the token was revoked: run zode login`.
+
+## Commands
+
+| Command | What it does | Page |
+|---|---|---|
+| `zode login`, `logout`, `whoami`, `version` | Sign in and out, show the account, print the version | This page |
+| `zode ls` | List sandboxes | [Sandboxes](/cli/sandboxes) |
+| `zode new [name]` | Make a sandbox | [Sandboxes](/cli/sandboxes) |
+| `zode ssh <sandbox>` | Open a shell | [Sandboxes](/cli/sandboxes) |
+| `zode exec <sandbox> -- cmd` | Run a command, stream its output | [Sandboxes](/cli/sandboxes) |
+| `zode fork <sandbox> [name]` | Copy a sandbox, memory and disk included | [Sandboxes](/cli/sandboxes) |
+| `zode stop`, `start`, `rm` | Hibernate, wake, delete | [Sandboxes](/cli/sandboxes) |
+| `zode browser <sandbox>` | Print a CDP endpoint for Chrome | [Browser and desktop](/cli/browser-desktop) |
+| `zode desktop <sandbox>` | Open, screenshot and drive the Linux desktop | [Browser and desktop](/cli/browser-desktop) |
+| `zode image build`, `ls`, `logs`, `rm` | Build and manage custom images | [Images](/cli/images) |
+| `zode cost` | Usage and cost of the workspace | [Cost](/cli/cost) |
+| `zode verify <sandbox\|region>` | Check a host's signed release yourself | [Verify](/cli/verify) |
+| `zode mcp` | MCP server for coding agents | [MCP server](/cli/mcp) |
+
+Some commands have aliases: `list` for `ls`, `create` for `new`, `shell` for `ssh`, `run` for `exec`, `delete` for `rm`, `images` for `image`. `zode help` prints the full usage.

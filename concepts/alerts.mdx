@@ -1,0 +1,120 @@
+---
+title: "Alerts"
+description: "Send workspace alerts to email, Slack, Discord, Telegram or a signed webhook, with per-event rules, quiet hours and a delivery log."
+---
+
+Alerts tell people when something needs attention: an agent stuck in a loop, a spend cap reached, a sandbox out of memory, a new member. Two things set them up:
+
+- **Channels** say where alerts go.
+- **Rules** say which event type goes to which channels.
+
+Everyone in the workspace can read channels and rules. Owners and admins change them, send tests and read deliveries. The console page is Configure, Alerts.
+
+## Channels
+
+| Kind | Fields |
+|---|---|
+| `email` | `members` (`managers` for the owner and admins, or `all`) and/or `addresses` (up to 20) |
+| `slack` | `url`: a Slack incoming webhook, `https://hooks.slack.com/...` |
+| `discord` | `url`: a Discord webhook, `https://discord.com/api/webhooks/...` |
+| `telegram` | `bot_token` (from @BotFather) and `chat_id` (a number or `@channel`) |
+| `webhook` | `url`: any HTTPS URL on a public host |
+
+URLs and bot tokens are write-only. The API stores them sealed and shows only a hint, such as `hooks.slack.com …x9Qz`.
+
+{/* untested */}
+```bash
+curl -s https://api.zode.dev/v1/alerts/channels \
+  -H "Authorization: Bearer $ZODE_TOKEN" -H "Content-Type: application/json" \
+  -d '{"kind": "slack", "name": "ops", "url": "https://hooks.slack.com/services/T000/B000/XXXX"}'
+```
+
+`PATCH /v1/alerts/channels/{id}` changes the name, recipients or secret; the kind cannot change. Deleting a channel removes it from every rule and drops its queued deliveries.
+
+A workspace has at most 20 channels and 50 rules, and a rule names at most 10 channels.
+
+### Test a channel
+
+`POST /v1/alerts/channels/{id}/test` sends a test alert now and answers 200 with what the provider said:
+
+```json
+{ "ok": true, "status": 200, "response": "ok", "detail": "HTTP 200: ok", "at": "2026-11-11T10:00:00Z" }
+```
+
+`status` is 0 when no response came back. The result is kept as the channel's `last_test`. You can test a channel 10 times a minute.
+
+### Webhook channels
+
+A `webhook` channel gets a signing secret, `zwhsec_...`, returned once in the create response as `signing_secret`. To rotate it, create a new channel. Each alert is a `POST` with these headers:
+
+- `Zode-Event-Id` and `Zode-Event-Type`
+- `Zode-Signature`: `t=<unix seconds>,v1=<hex HMAC-SHA256 of "<t>.<raw body>">`, keyed with the signing secret
+
+The signature scheme is the same as [workspace webhooks](/concepts/webhooks-and-telemetry#verify-the-signature), so the same verification code works. The body:
+
+```json
+{
+  "id": "nev_...",
+  "type": "spend.cap_reached",
+  "at": "2026-11-11T10:00:00Z",
+  "workspace": { "id": "org_...", "name": "Acme" },
+  "actor": "node:...",
+  "target_type": "sandbox",
+  "target_id": "sbx_...",
+  "data": {},
+  "text": "...",
+  "url": "https://console.zode.dev/..."
+}
+```
+
+## Rules
+
+A rule routes one event type to one or more channels.
+
+{/* untested */}
+```bash
+curl -s https://api.zode.dev/v1/alerts/rules \
+  -H "Authorization: Bearer $ZODE_TOKEN" -H "Content-Type: application/json" \
+  -d '{"event_type": "sandbox.oom", "channel_ids": ["ach_..."], "enabled": true}'
+```
+
+### Event types
+
+| Type | Critical | Fires when |
+|---|---|---|
+| `breaker.tripped` | yes | the loop breaker caught an agent repeating itself |
+| `spend.cap_reached` | yes | a sandbox reached its AI spend cap |
+| `spend.daily_cap_reached` | yes | the workspace reached its daily AI spend cap |
+| `sandbox.oom` | yes | a process in a sandbox was killed for lack of memory |
+| `sandbox.abuse_stopped` | yes | Zode stopped a sandbox for suspected abuse |
+| `sandbox.failed` | no | a sandbox's VM exited unexpectedly |
+| `sandbox.abuse_flagged` | no | Zode flagged a sandbox for suspected abuse |
+| `balance.low` | no | the credit balance runs low (not sent yet) |
+| `member.joined`, `member.left`, `member.removed`, `member.role_changed` | no | membership changes |
+| `api_key.created` | no | someone created an API key |
+| `workspace.transferred` | no | ownership was transferred |
+
+`GET /v1/alerts` returns this list with each type's `critical` flag and `source`.
+
+Each rule sends at most once per event per channel, so a repeated event sends nothing new.
+
+### Quiet hours and time zone
+
+A rule can hold alerts during daily quiet hours, for example `{"start": "22:00", "end": "07:00"}`. The window may cross midnight. A non-critical alert raised inside it is queued and sent when the window ends. Critical alerts are never held, and the API refuses quiet hours on a critical rule.
+
+Quiet hours use the workspace time zone, an IANA name, UTC by default:
+
+{/* untested */}
+```bash
+curl -s -X PATCH https://api.zode.dev/v1/alerts \
+  -H "Authorization: Bearer $ZODE_TOKEN" -H "Content-Type: application/json" \
+  -d '{"time_zone": "Europe/Berlin"}'
+```
+
+## Deliveries
+
+`GET /v1/alerts/deliveries` lists the 50 newest deliveries: rule, channel, event, a one-line summary, status (`pending`, `sent`, `failed`), attempts, `held_until` when quiet hours held it, the last error and the provider's response code.
+
+A failed send retries after 30 s, 2 min, 10 min, 30 min and 2 h (6 attempts in all), then becomes `failed`. A 4xx other than 408, 425 or 429, or any redirect, fails at once. An email channel sends one message per recipient.
+
+Every send is HTTPS only, with a 15 s timeout, no redirects, and no connections to private, loopback or link-local addresses.

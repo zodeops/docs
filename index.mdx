@@ -1,20 +1,55 @@
 ---
 title: "Introduction"
-description: "Welcome to your project"
+description: "Zode runs Linux microVMs for coding agents. Each sandbox has its own kernel, disk and memory."
 ---
 
-Write a short description of your product here. What it does, who it's for, and what they can accomplish with it.
+Zode gives your coding agents Linux VMs to work in. Each sandbox is a microVM (Cloud Hypervisor on KVM) with its own kernel, disk and memory. You drive it from the `zode` CLI, the TypeScript SDK, the HTTP API at `https://api.zode.dev`, or an MCP server your agent talks to.
 
-<Tip>
-  Ready to make this your own? Start by editing this page. Update your `docs.json` file to customize your site. Then fill out the [Quickstart](/quickstart) page.
-</Tip>
+## What you can do
 
-<Card title="Quickstart" icon="rocket" href="/quickstart">
-  This card links to the quickstart page in your project.
-</Card>
-<Card title="Components" icon="puzzle-piece" href="https://mintlify.com/docs/components">
-  Add cards, callouts, steps, tabs, and more to design and structure your pages.
-</Card>
-<Card title="Settings" icon="gear" href="https://mintlify.com/docs/organize/settings">
-  Set your site name, branding, and navigation in the `docs.json` file.
-</Card>
+- **Run commands.** Run a command and get its output and exit code, or open an interactive shell.
+- **Fork.** Copy a running or stopped sandbox, memory and disk included, into a new running sandbox.
+- **Snapshot and restore.** Save a sandbox's disk and memory, then roll the same sandbox back to it later.
+- **Stop and start.** Stopping hibernates the sandbox: disk and memory are kept and compute billing stops. Starting picks up where it left off.
+- **Drive a browser.** Switch on Chrome in the sandbox and connect Playwright, Puppeteer or browser-use over CDP.
+- **Use a Linux desktop.** Take screenshots, click and type, or embed a live view. The desktop is on the Pro plan and up.
+- **Build custom images.** Build an image from a Dockerfile or a list of setup commands, and start sandboxes from it with your tools already installed.
+- **Keep secrets out of the VM.** A sandbox sees a placeholder value. The host swaps in the real secret only on HTTPS requests to the hosts you allow.
+
+## Sizes
+
+Every sandbox has one of four fixed sizes. Compute is billed per second while the sandbox runs.
+
+| Size | vCPU | RAM | Disk | Price/hour |
+|---|---|---|---|---|
+| `small` | 2 | 4 GB | 50 GB | $0.0175 |
+| `default` | 4 | 8 GB | 50 GB | $0.035 |
+| `large` | 8 | 16 GB | 110 GB | $0.070 |
+| `xlarge` | 16 | 32 GB | 250 GB | $0.140 |
+
+`zode new` makes a `small` sandbox unless you pass `--size`. Storage is billed separately; see [Pricing](/pricing).
+
+Sandboxes run in `eu-central`. US East is coming soon.
+
+## Start here
+
+<CardGroup cols={2}>
+  <Card title="Quickstart" icon="rocket" href="/quickstart">
+    Install the CLI, make a sandbox, run a command, fork it.
+  </Card>
+  <Card title="Sandboxes" icon="server" href="/concepts/sandboxes">
+    Lifecycle, sizes, stop versus delete, limits.
+  </Card>
+  <Card title="CLI" icon="terminal" href="/cli/overview">
+    Every `zode` command.
+  </Card>
+  <Card title="TypeScript SDK" icon="js" href="/sdk/overview">
+    `@zodedev/sdk` for Node 22 and later.
+  </Card>
+  <Card title="API reference" icon="code" href="/api-reference/overview">
+    The HTTP API at `https://api.zode.dev`.
+  </Card>
+  <Card title="MCP" icon="plug" href="/cli/mcp">
+    Give Claude Code or Codex Zode tools with `zode mcp`.
+  </Card>
+</CardGroup>

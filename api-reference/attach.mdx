@@ -1,0 +1,128 @@
+---
+title: "Attach WebSocket"
+description: "The attach WebSocket runs a process in a sandbox and streams stdin, stdout, stderr, resize, signals and the exit status."
+---
+
+`GET /v1/sandboxes/{id}/attach` upgrades to a WebSocket and runs one process in a running sandbox. Use it for commands longer than the 55-second limit of `POST /v1/sandboxes/{id}/exec`, for more than 1 MiB of stdin, for streamed output, and for interactive shells. `zode ssh`, `zode exec` and the SDK's `spawn` use it.
+
+```text
+wss://api.zode.dev/v1/sandboxes/{id}/attach?argv=...&argv=...
+```
+
+`{id}` is the sandbox's `sbx_` id. Authenticate with the `Authorization: Bearer zode_tok_...` header. The socket is for servers and CLIs: a request whose `Origin` is not the API's own host gets `403 forbidden`, so browser pages cannot open it. Keys with the `read_only` scope cannot attach.
+
+## Query parameters
+
+| Parameter | Meaning |
+|---|---|
+| `argv` | The program, then each argument, one `argv` per item, in order. Leave it out for a login shell (`bash -l`). At most 256 items, 16 KB each. |
+| `tty` | `1` to run the process in a terminal. stdout and stderr then merge into stdout. |
+| `rows`, `cols` | Terminal size, 1 to 1000. With `tty=1` and no size, 24 rows by 80 columns. |
+| `cwd` | Working directory. Default `/workspace`. |
+
+`argv` runs as given, with no shell. To run a shell line, send `argv=bash&argv=-lc&argv=npm ci && npm test` (URL-encoded). The process runs as root.
+
+## Environment header
+
+Extra variables go in the `X-Zode-Env` header, never in the URL, because URLs end up in logs. The value is the unpadded base64url encoding of a JSON array of `KEY=VALUE` strings:
+
+```ts
+const header = Buffer.from(JSON.stringify(["NODE_ENV=test", "API_KEY=sk-..."])).toString("base64url");
+```
+
+Keys match `^[A-Za-z_][A-Za-z0-9_]{0,127}$`. At most 200 entries and 64 KB. The process gets a root login environment, then the sandbox's [environment](/concepts/environments-and-secrets), then these variables. A malformed header gets `400 invalid_request`.
+
+## Before the upgrade
+
+If the API refuses the session, it answers with an HTTP status and the usual [JSON error](/api-reference/overview#errors) instead of upgrading:
+
+| Status | Code | When |
+|---|---|---|
+| 400 | `invalid_request` | Bad query parameters or `X-Zode-Env`. |
+| 401 | `unauthorized` | Missing or invalid key. |
+| 403 | `forbidden`, `token_scope` | Wrong origin, role or key scope. |
+| 404 | `not_found` | No such sandbox. |
+| 409 | `invalid_state` | The sandbox is not running. Start it first. |
+| 502 | `node_error` | The host could not start the session. |
+
+## Frames
+
+Every message is binary. The first byte is the frame type, as an ASCII character; the rest is the payload.
+
+| Byte | Direction | Payload |
+|---|---|---|
+| `i` | client to sandbox | Bytes for the process's stdin. |
+| `e` | client to sandbox | Empty. Closes stdin. In a TTY it sends Ctrl-D instead. |
+| `r` | client to sandbox | New terminal size as ASCII `"rows cols"`, such as `"40 120"`. |
+| `s` | client to sandbox | Signal name: `HUP`, `INT`, `QUIT`, `KILL`, `USR1`, `USR2`, `TERM`, `STOP`, `CONT`, `WINCH`, `ALRM` or `PIPE`. A `SIG` prefix and lower case are accepted. It goes to the process group. |
+| `o` | sandbox to client | stdout bytes. |
+| `x` | sandbox to client | stderr bytes. Never sent with `tty=1`. |
+| `q` | sandbox to client | The exit status as JSON. The socket closes after it. |
+| `!` | sandbox to client | An error message as UTF-8 text. The socket closes after it. |
+
+A client message can be at most 1 MiB; send large stdin in chunks (the CLI and SDK use 32 KiB). Empty messages and unknown frame types are ignored.
+
+The `q` payload:
+
+```json
+{ "exit_code": -1, "signal": "KILL", "oom_killed": true, "peak_rss_mb": 3980.5 }
+```
+
+| Field | Meaning |
+|---|---|
+| `exit_code` | The process's exit code. `-1` when a signal ended it. |
+| `signal` | The signal that ended it, such as `TERM`. Absent otherwise. |
+| `timed_out` | Present and `true` when the process was killed at a time limit. |
+| `oom_killed` | Present and `true` when the kernel killed it for running out of memory. |
+| `peak_rss_mb` | Peak memory of the process, in MB. |
+
+## Ending a session
+
+- The process exits: you get `q`, then a normal close (code 1000).
+- The session fails: you get `!`, then a normal close.
+- You close the socket: the process is killed. There is no detach.
+- The socket closes with neither `q` nor `!`: treat the outcome as unknown.
+
+Send `e` once you have no more input. A command that reads stdin, such as `cat` or `npm init`, waits until it gets end-of-file. The API pings the client every 30 seconds to keep idle sessions open through load balancers; WebSocket libraries answer pings for you.
+
+## Example with Node and ws
+
+{/* untested */}
+```ts
+import WebSocket from "ws";
+
+const id = "sbx_q3vfn7tkx2mhcw4a";
+const q = new URLSearchParams();
+for (const a of ["bash", "-lc", "echo hello; echo oops >&2; exit 3"]) q.append("argv", a);
+
+const ws = new WebSocket(`wss://api.zode.dev/v1/sandboxes/${id}/attach?${q}`, {
+  headers: {
+    Authorization: `Bearer ${process.env.ZODE_API_KEY}`,
+    "X-Zode-Env": Buffer.from(JSON.stringify(["GREETING=hi"])).toString("base64url"),
+  },
+});
+
+const frame = (type: string, payload: Buffer = Buffer.alloc(0)) =>
+  Buffer.concat([Buffer.from(type), payload]);
+
+ws.on("open", () => ws.send(frame("e"))); // no stdin
+ws.on("message", (data: Buffer) => {
+  const type = String.fromCharCode(data[0]);
+  const body = data.subarray(1);
+  if (type === "o") process.stdout.write(body);
+  else if (type === "x") process.stderr.write(body);
+  else if (type === "q") process.exitCode = JSON.parse(body.toString()).exit_code;
+  else if (type === "!") { console.error(body.toString()); process.exitCode = 1; }
+});
+ws.on("unexpected-response", (_req, res) => {
+  let text = "";
+  res.on("data", (c) => (text += c));
+  res.on("end", () => { console.error(res.statusCode, text); process.exitCode = 1; });
+});
+```
+
+This prints `hello` on stdout and `oops` on stderr, and exits 3.
+
+## With the SDK
+
+The TypeScript SDK wraps this protocol. `sandbox.spawn(command, options)` opens a session and returns a handle: iterate it for output chunks, call `sendStdin`, `closeStdin`, `resize` and `kill`, and `await handle.wait()` for the exit result. See [the SDK's exec page](/sdk/exec).

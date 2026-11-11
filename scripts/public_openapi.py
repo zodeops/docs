@@ -151,6 +151,7 @@ GROUPS = [
 ]
 
 # Parenthesised pointers into the zoded repo mean nothing to a reader.
+SEE_REF = re.compile(r"\s*[Ss]ee `?(?:docs|internal|cmd)/[^\s`]+`?(?:\.(?=\s|$))?")
 REPO_REF = re.compile(r"\s*\((?:see |contract: )?`?(?:docs|internal|cmd)/[^)]*\)")
 INLINE_REF = re.compile(r"`?(?:docs|internal)/[A-Za-z0-9_./-]+`?")
 METHODS = ("get", "post", "put", "patch", "delete")
@@ -159,6 +160,7 @@ METHODS = ("get", "post", "put", "patch", "delete")
 def clean(text):
     if not isinstance(text, str):
         return text
+    text = SEE_REF.sub("", text)
     text = REPO_REF.sub("", text)
     text = INLINE_REF.sub("", text)
     text = text.replace("The WebRTC desktop is on.", "The Linux desktop is on.")
@@ -218,6 +220,8 @@ def main(src):
                 summary = op.get("summary", "")
                 desc = op.get("description", "")
                 op["summary"] = title
+                if summary.rstrip(".").lower() == title.lower():
+                    summary = ""
                 op["description"] = clean((summary + ".\n\n" + desc).strip() if summary else desc)
                 op["tags"] = [group]
                 mend_responses(op)
@@ -247,6 +251,23 @@ def main(src):
     )
     for name in ("OrgHeader", "CSRFHeader"):
         comps.get("parameters", {}).pop(name, None)
+
+    # Hosts accept only the four sizes, in one region; the spec's ranges are wider.
+    sizes = "small 2 vCPU / 4096 MB / 50 GB, default 4 / 8192 / 50, large 8 / 16384 / 110, xlarge 16 / 32768 / 250"
+    for schema in ("CreateSandboxRequest", "CreateImageRequest"):
+        props = comps["schemas"].get(schema, {}).get("properties", {})
+        if "vcpus" in props:
+            props["vcpus"] = {"type": "integer", "enum": [2, 4, 8, 16], "default": 2,
+                              "description": f"Picks the size: {sizes}. Other values give 400 `invalid_request`."}
+        if "ram_mb" in props:
+            props["ram_mb"] = {"type": "integer", "enum": [4096, 8192, 16384, 32768],
+                               "description": "Optional. Must match the size's RAM."}
+        if "disk_gb" in props:
+            props["disk_gb"] = {"type": "integer", "enum": [50, 110, 250],
+                                "description": "Optional. Must match the size's disk."}
+        if "region" in props:
+            props["region"] = {"type": "string", "enum": ["eu-central"], "default": "eu-central",
+                               "description": "`eu-central` is the only region today. US East is coming soon."}
 
     # Keep only the components the public routes reach.
     used, todo = set(), set()

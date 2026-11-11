@@ -1,0 +1,124 @@
+---
+title: "Snapshots and fork"
+description: "Fork copies a sandbox into a new one, memory included. A snapshot saves a sandbox so you can roll that same sandbox back."
+---
+
+Zode has two ways to save a sandbox's state, and they answer different questions.
+
+| | Fork | Snapshot and restore |
+|---|---|---|
+| What you get | A new running sandbox | A saved point in the same sandbox |
+| Includes | Disk and memory | Disk and memory |
+| Use it to | Try several things from one state, in parallel | Roll back after something goes wrong |
+| CLI | `zode fork` | Not in the CLI |
+| SDK | `sbx.fork()` | `sbx.snapshot()`, `sbx.restore()` |
+| API | `POST /v1/sandboxes/{id}/fork` | `POST /v1/snapshots`, `POST /v1/snapshots/{id}/restore` |
+
+## Fork
+
+A fork is a copy-on-write copy of a sandbox, memory and disk included. Processes that were running in the parent are running in the child, at the same point. The child is a new sandbox with its own id and name; after the fork the two are independent.
+
+You can fork a `running` or a `stopped` sandbox. A running parent is paused for a moment while its memory is saved and its disk is frozen at the same instant, then it carries on. The child comes back `running`.
+
+{/* untested */}
+<CodeGroup>
+
+```bash CLI
+zode fork demo demo-try-2
+```
+
+```ts TypeScript
+const child = await sbx.fork({ name: "demo-try-2", gitBranch: "try-2" });
+```
+
+```bash curl
+curl -sS -X POST https://api.zode.dev/v1/sandboxes/$ID/fork \
+  -H "Authorization: Bearer $ZODE_API_KEY" -H "Content-Type: application/json" \
+  -d '{"name":"demo-try-2","git_branch":"try-2"}'
+```
+
+</CodeGroup>
+
+What the child keeps and what you can change:
+
+- **Always the parent's**: size, region, host, git repo and [environment](/concepts/environments-and-secrets).
+- **The parent's unless you pass a new one**: `git_branch`, `pr_number`, `max_cost_micros`, and whether the browser and desktop are on. On the CLI, `--browser=false` or `--desktop` makes the child differ.
+- **New in the child**: its name (a generated one if you leave it out), hostname and network address. The child's random number generator is reseeded and its clock is set, so it does not repeat the parent's random values.
+
+Limits:
+
+- A fork counts as a create: it uses a running slot on your plan, counts against the create rate limit and is refused when the daily cap is reached. See [Sandboxes](/concepts/sandboxes#limits).
+- A fork runs on its parent's host. If that host has no free memory, fork returns 409 `node_full`.
+- Deleting the parent does not affect its forks.
+
+**Billing.** A fork is billed like any sandbox: compute while it runs, and storage on its full disk size from fork until delete. The copy-on-write sharing on the host does not lower the storage line today.
+
+## Snapshots
+
+A snapshot saves a sandbox's disk and memory at one instant, under a name. Restoring it rolls that same sandbox back to the saved point. Snapshots are in the API, the TypeScript SDK and the console (**Snapshots**, and a **Snapshots** tab on each sandbox). The CLI has no snapshot command.
+
+{/* untested */}
+<CodeGroup>
+
+```ts TypeScript
+const snap = await sbx.snapshot("before-migration");
+
+await sbx.exec("npm run migrate");
+
+// Undo: the sandbox goes back to the snapshot, memory and disk
+await sbx.restore(snap);
+
+const list = await sbx.snapshots();            // newest first
+await sbx.client.snapshots.delete(snap.id);
+```
+
+```bash curl
+API=https://api.zode.dev
+AUTH="Authorization: Bearer $ZODE_API_KEY"
+
+SNAP=$(curl -sS -X POST $API/v1/snapshots -H "$AUTH" \
+  -H "Content-Type: application/json" \
+  -d "{\"sandbox_id\":\"$ID\",\"name\":\"before-migration\"}" | jq -r .id)
+
+curl -sS -X POST $API/v1/snapshots/$SNAP/restore -H "$AUTH"
+curl -sS "$API/v1/snapshots?sandbox=$ID" -H "$AUTH"
+curl -sS -X DELETE $API/v1/snapshots/$SNAP -H "$AUTH"
+```
+
+</CodeGroup>
+
+### Taking a snapshot
+
+- The sandbox must be `running` or `stopped`. A running sandbox is paused for a moment while its memory is saved.
+- `name` is 1 to 64 printable characters and unique within the sandbox (409 `name_taken`). Leave it out and it becomes `snapshot-<UTC date and time>`, for example `snapshot-20261111-110400`.
+- Snapshots always include memory. `include_ram` defaults to `true`; `false` returns 400, because a sandbox is only ever restored from a saved memory image.
+- A sandbox keeps at most 20 snapshots (409 `limit_reached`). Delete one to take another.
+- Snapshot ids start with `snp_`.
+
+### Restoring
+
+`POST /v1/snapshots/{id}/restore` puts the sandbox's disk and memory back to the snapshot.
+
+- A running sandbox shows `starting` while the host works, then comes back `running` from the snapshot.
+- A stopped sandbox stays `stopped`; the next start resumes from the snapshot.
+- Anything done since the snapshot is lost, unless you snapshot it first.
+- Other snapshots of the sandbox, and forks made from it, are not affected.
+- Environment secrets are delivered to the sandbox again after the restore.
+
+The response has the snapshot and the sandbox: `{"snapshot": {...}, "sandbox": {...}}`.
+
+You cannot make a new sandbox from a snapshot. To branch off, fork the sandbox instead.
+
+### Deleting
+
+Deleting a snapshot returns 204. Deleting a sandbox deletes all its snapshots.
+
+### Cost
+
+Snapshots have no charge of their own today. Storage is billed per sandbox on its full disk size, whatever its snapshots hold. See [Pricing](/pricing).
+
+## Which to use
+
+- Your agent is about to run something risky, such as a migration or a large refactor: take a snapshot, and restore if it goes wrong.
+- You want to try three fixes from the same state: fork three times and run them side by side. Keep the one that works and delete the rest.
+- You want to pause work overnight: [stop](/concepts/sandboxes#stop-or-delete) the sandbox. That also keeps memory and disk.

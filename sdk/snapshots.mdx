@@ -1,0 +1,78 @@
+---
+title: "Snapshots"
+description: "Save a sandbox's disk and memory, list snapshots, roll back to one, and delete them with the TypeScript SDK."
+---
+
+A snapshot saves a sandbox's disk and memory. Restoring it puts the same sandbox back to that moment, running processes included. For a separate copy that runs next to the original, use [fork](#snapshot-or-fork) instead.
+
+{/* untested */}
+```ts
+const snap = await sbx.snapshot("before-migration");
+await sbx.exec("npm run db:migrate", { timeoutMs: 120_000 });
+await sbx.restore(snap); // back to before the migration
+```
+
+## On a sandbox
+
+| Method | Returns | What it does |
+|---|---|---|
+| `sbx.snapshot(name?)` | `Promise<Snapshot>` | Takes a snapshot of disk and memory |
+| `sbx.snapshots()` | `Promise<Snapshot[]>` | This sandbox's snapshots, newest first |
+| `sbx.restore(snapshot)` | `Promise<Sandbox>` | Rolls the sandbox back. Takes a `Snapshot` or its `snp_` id, and updates `sbx.record` |
+
+`snapshot` works on a running or stopped sandbox. A running sandbox pauses briefly while the snapshot is taken.
+
+- `name` is 1 to 64 printable characters and must be unique within the sandbox (`name_taken` otherwise). Left out, it is `snapshot-` and the UTC time, such as `snapshot-20261111-104512`.
+- A sandbox keeps at most 20 snapshots. The 21st fails with `limit_reached` (409); delete one first.
+- Every snapshot includes memory. There are no disk-only snapshots.
+
+`restore` also needs the sandbox running or stopped. A running sandbox restarts from the snapshot and is running afterwards. A stopped sandbox stays stopped and resumes from the snapshot on its next `start()`. Anything done since the snapshot is lost unless you snapshot it first.
+
+<Warning>
+  Pass `restore` a snapshot of the same sandbox. The SDK does not check: given another sandbox's snapshot, it rolls back that other sandbox, and `sbx.record` then describes the other sandbox.
+</Warning>
+
+## On the client
+
+`zode.snapshots` works with snapshot ids directly, without loading a sandbox first.
+
+| Method | Returns |
+|---|---|
+| `list(sandboxId?)` | `Promise<Snapshot[]>`: the workspace's snapshots, newest first; pass an `sbx_` id to narrow to one sandbox |
+| `create(sandboxId, name?)` | `Promise<Snapshot>` |
+| `restore(snapshotId)` | `Promise<{ snapshot: Snapshot; sandbox: SandboxInfo }>` |
+| `delete(snapshotId)` | `Promise<void>` |
+
+{/* untested */}
+```ts
+import { Zode } from "@zodedev/sdk";
+
+const zode = new Zode();
+for (const s of await zode.snapshots.list()) {
+  const ageDays = (Date.now() - Date.parse(s.created_at)) / 86_400_000;
+  if (ageDays > 7) await zode.snapshots.delete(s.id);
+}
+```
+
+## The Snapshot record
+
+```json
+{
+  "id": "snp_...",
+  "sandbox_id": "sbx_ilvsd743b36wqi26",
+  "sandbox_name": "fix-login",
+  "name": "before-migration",
+  "include_ram": true,
+  "created_by": { "member_id": "mem_...", "email": "you@example.com" },
+  "created_at": "2026-11-11T10:45:12Z"
+}
+```
+
+Snapshots belong to their sandbox. Deleting the sandbox deletes its snapshots.
+
+## Snapshot or fork
+
+- **Restore** rolls one sandbox back in place. Use it to undo a step and try again.
+- **[Fork](/sdk/sandboxes#fork)** makes a new running sandbox from the current state, memory and disk included, and leaves the original alone. Use it to try several things side by side.
+
+Both stay on the sandbox's host. See [Snapshots and fork](/concepts/snapshots-and-fork).

@@ -1,0 +1,123 @@
+---
+title: "Images"
+description: "Build custom sandbox images from a Dockerfile or setup commands with zode image, and start sandboxes from them."
+---
+
+A custom image is a sandbox disk with your tools already installed. You build it once; every sandbox made from it starts with that state. How builds work: [Images](/concepts/images).
+
+```bash
+zode image build <name> -f Dockerfile [--size S] [--timeout MIN] [--detach]
+zode image build <name> --run CMD [--run CMD ...] [-e K=V] [--workdir DIR] [--start CMD] [--ready CMD] [--size S]
+zode image ls
+zode image logs <image> [-f]
+zode image rm <image>
+zode new [name] --image <image>
+```
+
+`<image>` is a name or an `img_` id. Names match `^[a-z0-9][a-z0-9._-]{0,62}$`.
+
+## Build
+
+Give either a Dockerfile (`-f`) or setup flags (`--run` and friends), not both.
+
+| Flag | Effect |
+|---|---|
+| `-f FILE` | Build from a Dockerfile. `-f -` reads it from stdin (up to 1 MiB). |
+| `--run CMD` | A setup command. Repeat for more; they run in order. |
+| `-e KEY=VALUE` | A variable kept in the image. Repeat for more. |
+| `--workdir DIR` | Working directory for the setup commands. |
+| `--start CMD` | Command that runs when a sandbox boots from the image. |
+| `--ready CMD` | Check that the start command is up: it passes when it exits 0. |
+| `--size S` | `small`, `default`, `large` or `xlarge`. Default `small`. Sandboxes from the image keep this size. |
+| `--timeout MIN` | Build time limit in minutes, 1 to 60. Default 30. |
+| `--detach` | Start the build and return without following the log. |
+
+With `FROM zode/base` or `FROM ubuntu:24.04`, each Dockerfile line runs in a VM. Any other `FROM` is built with `docker build` inside the VM.
+
+In a `FROM zode/base` build, `RUN`, `ENV`, `ARG`, `WORKDIR` and `USER` shape the build, `CMD` or `ENTRYPOINT` becomes the start command, and `HEALTHCHECK` the ready check. `COPY` and `ADD` fail because there is no build context yet; fetch files with `RUN curl` or `git clone`. Instructions that do nothing in a sandbox, such as `EXPOSE` or `LABEL`, are skipped with a `note:` line.
+
+{/* untested */}
+```dockerfile
+FROM zode/base
+RUN apt-get update && apt-get install -y ripgrep
+WORKDIR /workspace/app
+RUN git clone https://github.com/acme/app . && npm ci
+ENV NODE_ENV=development
+```
+
+{/* untested */}
+```bash
+zode image build app-dev -f Dockerfile --size default
+```
+
+The CLI follows the build log until it ends:
+
+```text
+building app-dev (img_m4qz7rkd2wfxn3ta, 4 vCPU, 8 GB) in eu-central
+...
+app-dev is ready
+  zode new --image app-dev
+```
+
+Any `note:` lines about skipped instructions come first. A failed build exits 1 with `zode: app-dev failed: <reason>`.
+
+The same image with setup flags:
+
+{/* untested */}
+```bash
+zode image build app-dev --size default \
+  --run 'apt-get update && apt-get install -y ripgrep' \
+  --workdir /workspace/app \
+  --run 'git clone https://github.com/acme/app . && npm ci' \
+  -e NODE_ENV=development
+```
+
+## List
+
+```bash
+zode image ls
+```
+
+{/* untested */}
+```text
+NAME     STATUS    SIZE     FROM        BUILT
+app-dev  ready     default  dockerfile  2h ago
+web      building  small    setup       -
+2 of 3 images on the free plan
+```
+
+`STATUS` is `building`, `ready` or `failed`. `FROM` says whether the image came from a Dockerfile or setup flags. With no images it prints `no images yet: zode image build <name> -f Dockerfile`.
+
+## Logs
+
+```bash
+zode image logs app-dev       # print the log so far
+zode image logs app-dev -f    # follow it until the build ends
+```
+
+If part of a very long log was dropped before the CLI read it, the output marks the gap with `[N bytes of log not kept]`.
+
+## Delete
+
+```bash
+zode image rm app-dev
+```
+
+This cancels a build that is still running, or deletes a finished image.
+
+## Make a sandbox from an image
+
+```bash
+zode new api-1 --image app-dev
+```
+
+The image fixes the size, so `--size` with `--image` fails with `an image has its own size; drop --size`. Only a `ready` image can be used.
+
+## Plan limits
+
+| | Free | Pro | Team | Enterprise |
+|---|---|---|---|---|
+| Images kept | 3 | 20 | 100 | unlimited |
+| Builds at once | 1 | 2 | 4 | unlimited |
+
+Over the limit, `zode image build` fails with a message such as `the free plan keeps 3 images; delete one first`.

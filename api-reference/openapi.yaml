@@ -190,10 +190,7 @@ paths:
       tags:
       - Sandboxes
       summary: Create a sandbox
-      description: 'Create a sandbox.
-
-
-        Placed at random among active nodes in the region with enough free
+      description: 'Placed at random among active nodes in the region with enough free
 
         RAM (weighted by free RAM). Returns once the node reports the
 
@@ -205,7 +202,9 @@ paths:
 
         exec and attach session; unknown is 400 `unknown_environment`.
 
-        A fork keeps its parent''s environment.'
+        A fork keeps its parent''s environment.
+
+        '
       parameters:
       - name: environment
         in: query
@@ -1014,9 +1013,7 @@ paths:
 
         Sigstore Rekor inclusion proof, measurements, and on tpm_quoted hosts
 
-        a TPM quote over the caller''s nonce) and does not rely on `verdict`.
-
-        See '
+        a TPM quote over the caller''s nonce) and does not rely on `verdict`.'
       parameters:
       - $ref: '#/components/parameters/AttestNonce'
       responses:
@@ -6250,24 +6247,35 @@ components:
           pattern: ^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$
         vcpus:
           type: integer
-          minimum: 1
-          maximum: 16
+          enum:
+          - 2
+          - 4
+          - 8
+          - 16
           default: 2
+          description: 'Picks the size: small 2 vCPU / 4096 MB / 50 GB, default 4 / 8192 / 50, large 8
+            / 16384 / 110, xlarge 16 / 32768 / 250. Other values give 400 `invalid_request`.'
         ram_mb:
           type: integer
-          minimum: 512
-          maximum: 65536
-          multipleOf: 256
-          description: Defaults to 2048 per vCPU.
+          enum:
+          - 4096
+          - 8192
+          - 16384
+          - 32768
+          description: Optional. Must match the size's RAM.
         disk_gb:
           type: integer
-          minimum: 1
-          maximum: 500
-          default: 20
+          enum:
+          - 50
+          - 110
+          - 250
+          description: Optional. Must match the size's disk.
         region:
           type: string
-          description: One of the server's configured regions (default eu-central, us-east). Defaults
-            to the server's default region.
+          enum:
+          - eu-central
+          default: eu-central
+          description: '`eu-central` is the only region today. US East is coming soon.'
         git_repo:
           type: string
           maxLength: 512
@@ -6318,11 +6326,28 @@ components:
           $ref: '#/components/schemas/ImageSetup'
         vcpus:
           type: integer
-          description: With ram_mb, one of GET /v1/images `images`; default the default size.
+          enum:
+          - 2
+          - 4
+          - 8
+          - 16
+          default: 2
+          description: 'Picks the size: small 2 vCPU / 4096 MB / 50 GB, default 4 / 8192 / 50, large 8
+            / 16384 / 110, xlarge 16 / 32768 / 250. Other values give 400 `invalid_request`.'
         ram_mb:
           type: integer
+          enum:
+          - 4096
+          - 8192
+          - 16384
+          - 32768
+          description: Optional. Must match the size's RAM.
         region:
           type: string
+          enum:
+          - eu-central
+          default: eu-central
+          description: '`eu-central` is the only region today. US East is coming soon.'
         timeout_minutes:
           type: integer
           minimum: 1

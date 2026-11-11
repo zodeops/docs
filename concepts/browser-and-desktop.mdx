@@ -1,0 +1,200 @@
+---
+title: "Browser and desktop"
+description: "Run Chrome in a sandbox and drive it over CDP, or run a Linux desktop you can screenshot, click, type into and watch live."
+---
+
+A sandbox can run two extra things, each off by default:
+
+- **Browser**: Chrome inside the VM, which you drive from outside over the Chrome DevTools Protocol (CDP). Works with Playwright, Puppeteer and browser-use.
+- **Desktop**: a 1280x800 Linux desktop (Xfce). You take screenshots, send mouse and keyboard actions, and embed a live view in a page.
+
+A sandbox with neither switched on runs no extra processes.
+
+| | Free | Pro | Team | Enterprise |
+|---|---|---|---|---|
+| Browser | yes | yes | yes | yes |
+| Desktop | no | yes | yes | yes |
+
+On Free, asking for the desktop answers HTTP 403 `plan_required`: "the free plan does not include the desktop; upgrade in Billing".
+
+## Switch them on
+
+At create, or on a fork, pass `browser` and `desktop`. Left out, a new sandbox uses the workspace default (console, Settings) and a fork keeps its parent's values.
+
+{/* untested */}
+<CodeGroup>
+
+```bash CLI
+zode new web --browser --desktop
+zode fork web web-2 --desktop=false
+```
+
+```ts TypeScript
+import { Sandbox } from "@zodedev/sdk";
+
+const sb = await Sandbox.create({ browser: true, desktop: true });
+```
+
+```bash curl
+curl -s https://api.zode.dev/v1/sandboxes \
+  -H "Authorization: Bearer $ZODE_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"name": "web", "vcpus": 2, "browser": true, "desktop": true}'
+```
+
+</CodeGroup>
+
+On a running sandbox, switch either one with `PATCH /v1/sandboxes/{id}/features`. It returns the sandbox.
+
+{/* untested */}
+<CodeGroup>
+
+```bash CLI
+zode browser web --on
+zode desktop web --on
+zode browser web --off
+```
+
+```ts TypeScript
+await sb.browser.enable();
+await sb.desktop.enable();
+await sb.browser.disable();
+```
+
+```bash curl
+curl -s -X PATCH https://api.zode.dev/v1/sandboxes/$ID/features \
+  -H "Authorization: Bearer $ZODE_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"browser": true}'
+```
+
+</CodeGroup>
+
+If a create asks for a feature and the host fails to start it, the sandbox is still created, the feature stays off, and the response carries a `feature_error` message.
+
+Switching off stops the processes. Chrome's profile stays on disk, so cookies and logins survive an off and on. Stop, start, restore and fork switch the features back on as recorded.
+
+## Connect to Chrome
+
+`GET /v1/sandboxes/{id}/browser` returns a browser-level CDP WebSocket URL:
+
+```json
+{
+  "cdp_url": "wss://eu-1.nodes.zode.dev/cdp/sbx-abc?t=...",
+  "transport": "direct",
+  "expires_at": "2026-11-09T12:05:00Z"
+}
+```
+
+The ticket in the URL opens a connection for 5 minutes. A connection that is open stays open. Ask again for a new URL each time you connect. `transport` is `direct` (straight to the host) or `relay` (through `api.zode.dev`, when the host has no public address). Only the WebSocket is exposed; the `/json` HTTP endpoints are not.
+
+{/* untested */}
+<CodeGroup>
+
+```ts Playwright
+import { chromium } from "playwright";
+
+const browser = await chromium.connectOverCDP(await sb.browser.cdpUrl());
+const context = browser.contexts()[0] ?? (await browser.newContext());
+const page = await context.newPage();
+await page.goto("https://example.com");
+console.log(await page.title());
+```
+
+```ts Puppeteer
+import puppeteer from "puppeteer-core";
+
+const browser = await puppeteer.connect({ browserWSEndpoint: await sb.browser.cdpUrl() });
+const page = await browser.newPage();
+await page.goto("https://example.com");
+```
+
+```python browser-use
+from browser_use import Browser
+
+browser = Browser(cdp_url=cdp_url)  # cdp_url from `zode browser web`
+```
+
+</CodeGroup>
+
+From the CLI, `zode browser web` prints the URL and `zode browser web --json` prints the whole answer.
+
+Inside the sandbox, the same Chrome listens at `http://127.0.0.1:9222`, so an agent running in the VM can attach with `npx @playwright/mcp --cdp-endpoint http://127.0.0.1:9222` or `Browser(cdp_url="http://127.0.0.1:9222")`.
+
+## Use the desktop
+
+Screenshots and actions use screen pixels from the top left. `GET /v1/sandboxes/{id}/desktop` returns the screen size, `{"width": 1280, "height": 800}`.
+
+{/* untested */}
+<CodeGroup>
+
+```bash CLI
+zode desktop web screenshot -o shot.png
+zode desktop web click 640 400
+zode desktop web type "hello"
+zode desktop web key ctrl+l
+zode desktop web scroll 640 400 --dy 5
+```
+
+```ts TypeScript
+const png = await sb.desktop.screenshot(); // Uint8Array, PNG
+await sb.desktop.click(640, 400, { button: "left", double: false });
+await sb.desktop.type("hello");
+await sb.desktop.key("ctrl+l");
+await sb.desktop.scroll(640, 400, { dy: 5 });
+```
+
+```bash curl
+curl -s https://api.zode.dev/v1/sandboxes/$ID/desktop/screenshot \
+  -H "Authorization: Bearer $ZODE_TOKEN" -o shot.png
+curl -s https://api.zode.dev/v1/sandboxes/$ID/desktop/actions \
+  -H "Authorization: Bearer $ZODE_TOKEN" -H "Content-Type: application/json" \
+  -d '{"action": "click", "x": 640, "y": 400, "button": "left", "double": false}'
+```
+
+</CodeGroup>
+
+`POST .../desktop/actions` takes one action per request (at most 64 KB) and answers 204. The actions are `move`, `click`, `type`, `key` and `scroll`; scroll `dx` and `dy` are notches, positive is right or down.
+
+A screenshot taken in the first second or two after switching the desktop on can be black while the session paints.
+
+### Live view
+
+`POST /v1/sandboxes/{id}/desktop/session` returns a page URL to embed. Its ticket opens the page for 1 hour; the open page keeps its own connection. The view is watch-only unless you send `{"control": true}`, which lets the viewer's mouse, keyboard, clipboard and file transfer through.
+
+{/* untested */}
+```ts
+const { url } = await sb.desktop.viewUrl({ control: false });
+```
+
+```html
+<iframe src="https://eu-1.nodes.zode.dev/desktop/sbx-abc/?t=..."
+        allow="clipboard-read; clipboard-write; fullscreen; autoplay"></iframe>
+```
+
+The stream decodes in the browser with WebCodecs, so the embedding page must be served over HTTPS. `zode desktop web` opens the same view in the console.
+
+With both features on, Chrome runs on the desktop's screen, so you can watch an agent's browser. Switching the desktop on or off restarts a running Chrome to move it: open CDP connections drop and you reconnect.
+
+## Resource use
+
+Both run inside the sandbox's own CPU and memory. Measured at 1280x800:
+
+- Chrome: about 230 MB of RAM.
+- Desktop (X server, Xfce, helper): about 400 MB of RAM.
+- The video encoder runs only while someone watches the live view: about half of one vCPU at 60 fps on a mostly still screen. Screenshots do not use it.
+
+On a `small` sandbox (4 GB), plan for both together to take roughly 650 MB before your own workload.
+
+## Errors
+
+| Status | Code | When |
+|---|---|---|
+| 409 | `invalid_state` | the sandbox is not running; start it first |
+| 409 | `browser_off`, `desktop_off` | the feature is off; switch it on first |
+| 403 | `plan_required` | your plan does not include it |
+| 501 | `feature_unavailable` | the sandbox's host cannot run it yet |
+| 502 | `node_error` | the host did not start it; the message says why |
+| 400 | `invalid_request` | an action the desktop does not accept |
+
+See [the CLI reference](/cli/browser-desktop) and [the SDK reference](/sdk/browser-desktop).

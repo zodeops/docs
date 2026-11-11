@@ -1,0 +1,93 @@
+---
+title: "Security"
+description: "How Zode isolates sandboxes, controls their network and secrets, scopes API keys and roles, and records what happens in a workspace."
+---
+
+This page describes what the platform does today. Where something is not shipped yet, it says so.
+
+## Isolation
+
+Each sandbox is its own virtual machine: a microVM run by Cloud Hypervisor on KVM, with its own Linux kernel, disk and memory. Sandboxes do not share a kernel with each other or with the host. Code you run as root in a sandbox is root in that VM only.
+
+- Sandboxes from different workspaces can run on the same host. The API never tells you which host a sandbox is on.
+- The host controls the VM through a guest agent over virtio-vsock. Only the host can open that channel, and each boot uses its own token.
+- When you fork a running sandbox, the copy gets fresh entropy for its random number generator, the current time, and a new hostname, MAC address and IP address before it runs on. Two forks do not share random state. Programs in the sandbox can watch `/run/zode/events` for a `forked` event.
+
+## Network
+
+Sandboxes can reach the internet. The host drops these outbound destinations for every sandbox:
+
+- SMTP ports 25, 465 and 587
+- private address ranges (RFC 1918), link-local addresses and the cloud metadata server
+
+Web traffic on ports 80 and 443 goes through an egress proxy on the host. The proxy records each connection's host and outcome for the flight recorder, never request or response bodies. Traffic on other ports goes straight out through the host's NAT.
+
+### The secrets vault
+
+Secrets you store in an [environment](/concepts/environments-and-secrets) never enter the sandbox. The sandbox sees a placeholder such as `zode_vault_...`. When the sandbox sends that placeholder over TLS to one of the secret's allowed hosts, the egress proxy swaps in the real value on the way out. Sent to any other host, the placeholder goes out unchanged and is useless to the receiver.
+
+To make the swap, the proxy opens TLS connections to two kinds of hosts: hosts that one of the sandbox's secrets allows, and known AI provider APIs, whose usage it meters for [spend reporting](/concepts/spend-and-caps). Each sandbox trusts a certificate authority for its workspace so this works. All other TLS connections pass through unread.
+
+Secret values are encrypted at rest with AES-256-GCM, each under its own data key, which is wrapped by a server key. The API returns secret names and allowed hosts, never values, and Zode's logs record secret names only.
+
+## API keys
+
+API keys start with `zode_tok_` and belong to one workspace. Zode stores only a SHA-256 hash of each key, so the key is shown once, when you create it. Create and revoke keys in the console under **Settings**, **API keys**, or through the API.
+
+| Scope | What the key can call |
+|---|---|
+| `full` | Everything its creator's role allows |
+| `read_only` | `GET` and `HEAD` requests only, and never a shell session (`attach`) |
+| `sandboxes` | Sandbox routes and `GET /v1/whoami` only |
+
+A key can expire after up to 365 days, or never. A call outside the key's scope fails with `token_scope` (403).
+
+## Roles
+
+| Role | Can |
+|---|---|
+| `owner` | Everything, including transferring and deleting the workspace |
+| `admin` | Run sandboxes, manage members, invites, environments, webhooks and alerts, read the audit log |
+| `member` | Run sandboxes; read environments, variables and secret names |
+| `billing` | Read usage, manage billing; no sandbox access |
+
+Billing settings are changed by owners and the billing role; admins can read them. A call your role does not allow fails with `forbidden` (403) and is written to the audit log.
+
+## Audit log
+
+Every change to a workspace writes an audit event: sandbox create, fork, stop, start, delete, exec and attach, browser and desktop connections, token, member and environment changes, and refused attempts. Each event has the actor (member and token), action, target, outcome, client IP and time. For `exec`, only the program name is recorded, never its arguments.
+
+Owners and admins read the log with `GET /v1/audit`. It filters by `actor`, `action` (a prefix such as `sandbox.`), `target`, `from` and `to` (a UTC day or RFC 3339 time), and pages with `limit` (1 to 500, default 50) and `before`. On the Team and Enterprise plans, `GET /v1/audit.csv` exports up to 50,000 rows.
+
+```bash
+curl -s "https://api.zode.dev/v1/audit?action=sandbox.&limit=20" \
+  -H "Authorization: Bearer $ZODE_API_KEY"
+```
+
+The database refuses updates and deletes of audit events, so entries cannot be changed after they are written.
+
+## Abuse controls
+
+On the Free plan, Zode stops a sandbox that averages 90% CPU or more for an hour, or that contacts 300 or more distinct destinations (or fails 300 or more connections) in 10 minutes. It stops every running sandbox of a Free workspace once the workspace has sent 10 GiB out in a UTC day. Each stop is in the audit log.
+
+On every plan, creates and forks are limited to 30 per person and 60 per workspace in an hour; past that they fail with `rate_limited` (429).
+
+## Host attestation
+
+`zode verify <sandbox|region>` checks that a host runs a release Zode signed: it verifies the release manifest's signature and its entry in the public Rekor transparency log. See [Attestation](/concepts/attestation).
+
+<Warning>
+  Signed host releases are rolling out. Today the hosts do not have a signed release installed, so `zode verify` reports them as not verified. Do not rely on attestation yet.
+</Warning>
+
+## Data location
+
+Sandboxes, their disks, memory and snapshots stay on hosts in the `eu-central` region, which is in the EU. The API and its database run in the same EU location. US East is coming soon.
+
+## Deletion
+
+- Deleting a sandbox destroys its disk, saved memory and snapshots on the host.
+- Deleting a workspace revokes its API keys and deletes its remaining sandboxes. Only an owner can do it, every sandbox must be stopped or deleted first, and a personal workspace cannot be deleted.
+- Flight recorder data is kept for your plan's retention (7, 30 or 90 days) and purged for deleted sandboxes.
+
+To report a security issue, email [hello@zode.dev](mailto:hello@zode.dev).

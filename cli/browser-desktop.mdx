@@ -1,0 +1,99 @@
+---
+title: "Browser and desktop"
+description: "Get a CDP endpoint for Chrome in a sandbox, and screenshot or drive its Linux desktop from the zode CLI."
+---
+
+## Browser
+
+```bash
+zode browser <sandbox> [--on | --off] [--json]
+```
+
+| Flag | Effect |
+|---|---|
+| none | Print a CDP WebSocket URL for Chrome in the sandbox. |
+| `--json` | Print the whole answer: `cdp_url`, `transport`, `expires_at`. With `--on` or `--off`, print the updated sandbox. |
+| `--on` | Switch Chrome on in a running sandbox. |
+| `--off` | Switch it off. The profile (cookies, storage) is kept. |
+
+{/* untested */}
+```bash
+zode browser demo --on
+zode browser demo --json
+```
+
+```text
+demo: browser on
+  zode browser demo
+```
+
+```json
+{
+  "cdp_url": "wss://eu-1.nodes.zode.dev/cdp/...",
+  "transport": "direct",
+  "expires_at": "2026-11-11T11:20:00Z"
+}
+```
+
+The URL is a browser-level CDP endpoint. You have 5 minutes to open a connection with it; a connection you opened stays open. Run `zode browser` again for a fresh URL.
+
+```ts
+// Playwright
+const browser = await chromium.connectOverCDP(url);
+// Puppeteer
+const browser = await puppeteer.connect({ browserWSEndpoint: url });
+```
+
+```python
+# browser-use
+browser = Browser(cdp_url=url)
+```
+
+If Chrome is off, the CLI says `the browser is off in demo: run zode browser demo --on`. To have Chrome from the start, use `zode new --browser`. Concepts and limits: [Browser and desktop](/concepts/browser-and-desktop).
+
+## Desktop
+
+The desktop is a Linux desktop in the sandbox. It is on the Pro, Team and Enterprise plans. On Free, switching it on fails with `the free plan does not include the desktop; upgrade in Billing`.
+
+```bash
+zode desktop <sandbox> [--on | --off] [--json]
+zode desktop <sandbox> <action> [args] [flags]
+```
+
+With no action, `zode desktop` prints the console URL of the live view (`https://console.zode.dev/sandboxes/sbx_.../desktop`) and opens it in your browser when stdout is a terminal. If the desktop is off, it prints the URL and a hint to run `--on`.
+
+| Flag | Effect |
+|---|---|
+| `--on` | Switch the desktop on in a running sandbox. |
+| `--off` | Switch it off. |
+| `--json` | With `--on` or `--off`, print the updated sandbox as JSON. |
+
+### Actions
+
+Coordinates are screen pixels from the top left. Put an action's flags after the action name.
+
+| Action | Effect |
+|---|---|
+| `screenshot [-o FILE]` | Save a PNG. Default file `<sandbox>-<unix time>.png`; `-o -` writes it to stdout. |
+| `click X Y [--button left\|middle\|right] [--double]` | Click at a point. Default button `left`. |
+| `move X Y` | Move the pointer. |
+| `type TEXT` | Type text. Several words are joined with spaces. |
+| `key KEYS` | Press a key or chord, such as `ctrl+l`, `ctrl+shift+t` or `Return`. |
+| `scroll X Y [--dx N] [--dy N]` | Scroll at a point, in notches. Positive `--dy` is down, positive `--dx` is right. Give at least one. |
+
+{/* untested */}
+```bash
+zode desktop demo --on
+zode desktop demo click 640 50
+zode desktop demo key ctrl+l
+zode desktop demo type https://example.com
+zode desktop demo key Return
+zode desktop demo scroll 640 400 --dy 5
+zode desktop demo screenshot -o page.png
+```
+
+```text
+page.png (143 KB)
+```
+
+`click`, `move`, `type`, `key` and `scroll` print nothing on success. `zode desktop help` prints the same reference. Set `ZODE_CONSOLE_URL` to point the live-view URL at another console origin.

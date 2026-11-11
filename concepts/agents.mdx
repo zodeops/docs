@@ -1,0 +1,123 @@
+---
+title: "Agents"
+description: "Run coding agents in sandboxes on your own provider keys, with key failover, spend caps and a loop breaker on the host. AI spend is shown, never billed."
+---
+
+Every sandbox has five coding agents ("harnesses") installed. You connect your own model provider keys once. The keys never enter the VM: the host's egress proxy adds them to each request on the way out.
+
+## Harnesses
+
+| id | Name | Accepts keys from | Model ids |
+|---|---|---|---|
+| `claude-code` | Claude Code | anthropic, bedrock, vertex, deepseek | `claude-...` |
+| `codex` | Codex | openai | `gpt-...`, `o3...` |
+| `opencode` | OpenCode | anthropic, openai, openrouter, gemini | `<provider>/<model>` |
+| `pi` | pi | anthropic, openai, deepseek, gemini, bedrock, vertex | `<provider>/<model>`, Gemini as `google/...` |
+| `kimi-code` | Kimi Code | anthropic, openai, deepseek | `<provider>/<model>` |
+
+`GET /v1/agents` lists them with the providers you have connected, your defaults and the models each can default to. A key is stored per provider, so one Anthropic key serves Claude Code, OpenCode, pi and Kimi Code.
+
+## Connect your provider keys
+
+Your keys are yours alone. They are never listed to other members, never pooled, and used only in sandboxes you created or forked. The API stores them sealed (AES-256-GCM) and only ever returns the last 4 characters.
+
+{/* untested */}
+```bash
+curl -s https://api.zode.dev/v1/agents/credentials \
+  -H "Authorization: Bearer $ZODE_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"provider": "anthropic", "api_key": "sk-ant-..."}'
+```
+
+Posting again for the same provider replaces the key. `DELETE /v1/agents/credentials/{provider}` removes it.
+
+| Provider | What to paste |
+|---|---|
+| `anthropic`, `openai`, `openrouter`, `gemini`, `deepseek` | an API key, 8 to 512 visible characters |
+| `bedrock` | a Bedrock API key, up to 4,096 characters. AWS access key IDs (`AKIA...`, `ASIA...`) are refused |
+| `vertex` | a service account JSON file (up to 16 KB) or a Vertex API key. Claude on Vertex needs a service account |
+
+Keys belong to a person, so an API key whose member has never signed in to Zode gets 403 `no_user`.
+
+## Default harness and models
+
+`PATCH /v1/agents/settings` stores your default harness and a default model per harness. `""` clears a value. A model the harness does not list answers 400 `invalid_request`.
+
+{/* untested */}
+```bash
+curl -s -X PATCH https://api.zode.dev/v1/agents/settings \
+  -H "Authorization: Bearer $ZODE_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"default_harness": "claude-code", "default_models": {"claude-code": "claude-sonnet-4-5"}}'
+```
+
+The models offered are the ones Zode has prices for, so every default is metered. The console shows these choices; no CLI command reads them yet.
+
+## Run an agent in a sandbox
+
+The agent's SDK wants its key variable set, so set it to any placeholder. The proxy removes it and puts the real key in.
+
+{/* untested */}
+```bash
+zode exec -e ANTHROPIC_API_KEY=zode box -- claude -p "fix the failing tests"
+zode exec -e OPENAI_API_KEY=zode box -- codex exec "add a /healthz endpoint"
+```
+
+If Zode holds no key for a provider, the request goes out with the agent's own credentials, untouched.
+
+## Workspace keys and failover
+
+Owners and admins can add shared workspace keys under `/v1/proxying`. Every role can read the settings. For each request the proxy tries, in order:
+
+1. the key of the person who launched the sandbox, then
+2. the workspace keys for that provider, in failover order (`position` 0 first).
+
+On a 429, 529 or 503 from the provider, the proxy puts that key on cooldown and resends the same request with the next key. The cooldown follows the provider's `Retry-After` (30 s for 429 and 10 s for 529 or 503 when there is none, at most 1 hour). If every key is throttled, the last 429 or 529 reaches the agent with its `Retry-After`, so the agent backs off. Once a response starts streaming, nothing is retried. A 401 or 403 does not fail over.
+
+{/* untested */}
+```bash
+curl -s https://api.zode.dev/v1/proxying/keys \
+  -H "Authorization: Bearer $ZODE_TOKEN" -H "Content-Type: application/json" \
+  -d '{"provider": "anthropic", "label": "team", "api_key": "sk-ant-..."}'
+curl -s https://api.zode.dev/v1/proxying/keys/order \
+  -H "Authorization: Bearer $ZODE_TOKEN" -H "Content-Type: application/json" \
+  -d '{"provider": "anthropic", "ids": ["aik_b...", "aik_a..."]}'
+```
+
+A provider takes at most 10 workspace keys (409 `too_many_keys`). The order call must list every key of that provider exactly once, else 400 `order_mismatch`.
+
+## Loop breaker and caps
+
+`PATCH /v1/proxying/settings` (owners and admins) sets the loop breaker and the AI spend caps. Amounts are micro-dollars (1 USD = 1,000,000). `{"reset": true}` restores the breaker defaults.
+
+| Field | Default | Range |
+|---|---|---|
+| `loop.max_calls` per 15 min | 100 | 10 to 10,000 |
+| `loop.max_spend_micros` per 15 min | 5,000,000 ($5) | $0.50 to $1,000 |
+| `loop.max_same_failures` (same command, cwd and exit code) | 8 | 3 to 100 |
+| `caps.sandbox_max_cost_micros` (default per sandbox) | none | none, or $0.10 to $10,000 |
+| `caps.daily_cap_micros` (workspace, UTC day) | none | none, or $1 to $100,000 |
+| `caps.low_balance_micros` | 2,000,000 ($2) | $0 to $10,000 |
+
+The loop breaker reports today: when it trips it sends a `breaker.tripped` event to your [alerts](/concepts/alerts) and [webhooks](/concepts/webhooks-and-telemetry), and calls keep going. It does not see code changes yet, so a long busy session can trip it.
+
+The two caps are the same values as the spend caps in Billing. When a sandbox's cap or the daily cap is spent, AI calls through Zode keys answer HTTP 402 with `{"type":"error","error":{"type":"zode_spend_cap",...}}`. See [Spend and caps](/concepts/spend-and-caps).
+
+## AI spend: shown, not billed
+
+You pay your provider directly. Zode adds no markup and does not bill AI calls. The proxy prices each call at the provider's list price and reports it per repo, branch, PR, member, sandbox and model in `zode cost --by model` and `GET /v1/usage`.
+
+<Note>
+AI spend reporting reads the flight recorder, which the hosts do not write to yet. Until they do, usage shows AI spend as $0 in 0 calls. Caps are counted on the host and apply regardless.
+</Note>
+
+## Drive Zode from your coding agent
+
+The other direction: an agent on your laptop creates and uses sandboxes through MCP. `zode mcp` is a stdio MCP server signed in as you.
+
+```bash
+claude mcp add zode -- zode mcp
+codex mcp add zode -- zode mcp
+```
+
+The agent gets `sandbox_list`, `sandbox_create`, `sandbox_exec`, `sandbox_read_file`, `sandbox_write_file`, `sandbox_fork`, `sandbox_stop`, `sandbox_start` and `sandbox_delete`. See [MCP](/cli/mcp).
