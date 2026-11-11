@@ -25,10 +25,6 @@ const sbx = await Sandbox.create({ browser: true, desktop: true });
 if (sbx.featureError) console.warn(sbx.featureError);
 ```
 
-<Note>
-  `featureError` was added after `@zodedev/sdk` 0.1.1 and ships in the next npm release. In 0.1.1 the API's `feature_error` field is in `sbx.record` right after the create or fork, but not in its type: read it as `(sbx.record as { feature_error?: string }).feature_error`.
-</Note>
-
 | Error | When |
 |---|---|
 | `invalid_state` (409) | The sandbox is not running |

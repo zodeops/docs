@@ -29,10 +29,6 @@ await sbx.restore(snap); // back to before the migration
 
 `sbx.restore(snap)` only takes a snapshot of `sbx` itself. Given another sandbox's snapshot, it throws `ZodeError` with code `wrong_sandbox` (status 0) before calling the API, and nothing is rolled back. Given an `snp_` id, it looks the snapshot up first and throws `not_found` (404) for an unknown id. The client's `zode.snapshots.restore(id)` has no such check: it rolls back whichever sandbox the snapshot belongs to.
 
-<Warning>
-  `@zodedev/sdk` 0.1.1 does not have this check; it ships in the next npm release. With 0.1.1, pass `restore` only snapshots of the same sandbox: given another sandbox's snapshot, it rolls back that other sandbox, and `sbx.record` then describes the other sandbox.
-</Warning>
-
 ## On the client
 
 `zode.snapshots` works with snapshot ids directly, without loading a sandbox first.

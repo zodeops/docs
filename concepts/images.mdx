@@ -143,4 +143,4 @@ zode image rm web     # cancels a build, or deletes a ready or failed image
 
 Sandboxes already made from an image keep running after you delete it.
 
-In the console, **Images** builds and lists images, and **New sandbox** offers your ready images. In the API, use `POST /v1/images` and pass `image` (a name or `img_` id) to `POST /v1/sandboxes`; see the [API reference](/api-reference/overview). In the TypeScript SDK, pass `image` to `Sandbox.create` (after 0.1.1; see [Custom images](/sdk/sandboxes#custom-images) for 0.1.1). From an MCP client, pass `image` to `sandbox_create`.
+In the console, **Images** builds and lists images, and **New sandbox** offers your ready images. In the API, use `POST /v1/images` and pass `image` (a name or `img_` id) to `POST /v1/sandboxes`; see the [API reference](/api-reference/overview). In the TypeScript SDK, pass `image` to `Sandbox.create` (0.2.0 or later; see [Custom images](/sdk/sandboxes#custom-images)). From an MCP client, pass `image` to `sandbox_create`.

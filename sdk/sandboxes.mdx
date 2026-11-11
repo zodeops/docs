@@ -63,18 +63,6 @@ const sbx = await Sandbox.create({ image: "node-pg", name: "from-image" });
 
 The image fixes the size and region. Leave out `vcpus`, `ramMb`, `diskGb` and `region`, or match the image's; anything else is refused with 400. See [Custom images](/concepts/images).
 
-<Note>
-  The `image` option was added after `@zodedev/sdk` 0.1.1 and ships in the next npm release. With 0.1.1, send it through `zode.request` and load the result:
-
-  ```ts
-  import { Zode, type SandboxInfo } from "@zodedev/sdk";
-
-  const zode = new Zode();
-  const info = await zode.request<SandboxInfo>("POST", "/v1/sandboxes", { image: "node-pg", name: "from-image" });
-  const sbx = await zode.sandboxes.get(info.id);
-  ```
-</Note>
-
 ### When a create is refused
 
 Common refusals, all thrown as `ZodeError` (details in [Errors](/sdk/errors)):
