@@ -1,54 +1,315 @@
 {
   "$schema": "https://mintlify.com/docs.json",
-  "theme": "mint",
-  "name": "Mintlify Starter Kit",
+  "theme": "linden",
+  "name": "Zode",
+  "description": "Linux VMs for coding agents. Start a sandbox, run commands, fork it, and pay per vCPU-hour.",
   "colors": {
-    "primary": "#16A34A",
-    "light": "#07C983",
-    "dark": "#15803D"
+    "primary": "#0f8a3c",
+    "light": "#00ff4f",
+    "dark": "#0b4a22"
   },
-  "favicon": "/favicon.svg",
-  "navigation": {
-    "pages": [
-      {
-        "group": "Getting Started",
-        "pages": [
-          "index",
-          "quickstart"
-        ]
-      }
-    ],
-    "global": {
-      "anchors": [
-        {
-          "anchor": "Documentation",
-          "href": "https://mintlify.com/docs",
-          "icon": "book-open-cover"
-        },
-        {
-          "anchor": "Blog",
-          "href": "https://mintlify.com/blog",
-          "icon": "newspaper"
-        }
-      ]
+  "background": {
+    "color": {
+      "light": "#f4f8f3",
+      "dark": "#050706"
     }
   },
+  "appearance": {
+    "default": "dark"
+  },
+  "favicon": "/favicon.svg",
   "logo": {
     "light": "/logo/light.svg",
-    "dark": "/logo/dark.svg"
+    "dark": "/logo/dark.svg",
+    "href": "https://zode.dev"
   },
   "navbar": {
     "links": [
       {
         "label": "Support",
-        "href": "mailto:support@mintlify.com"
+        "href": "mailto:hello@zode.dev"
       }
     ],
     "primary": {
       "type": "button",
-      "label": "Dashboard",
-      "href": "https://app.mintlify.com"
+      "label": "Console",
+      "href": "https://console.zode.dev"
     }
+  },
+  "navigation": {
+    "tabs": [
+      {
+        "tab": "Guides",
+        "groups": [
+          {
+            "group": "Get started",
+            "pages": [
+              "index",
+              "quickstart"
+            ]
+          },
+          {
+            "group": "Concepts",
+            "pages": [
+              "concepts/sandboxes",
+              "concepts/snapshots-and-fork",
+              "concepts/images",
+              "concepts/environments-and-secrets",
+              "concepts/browser-and-desktop",
+              "concepts/agents",
+              "concepts/spend-and-caps",
+              "concepts/webhooks-and-telemetry",
+              "concepts/alerts",
+              "concepts/ci",
+              "concepts/attestation"
+            ]
+          },
+          {
+            "group": "CLI",
+            "pages": [
+              "cli/overview",
+              "cli/sandboxes",
+              "cli/browser-desktop",
+              "cli/images",
+              "cli/cost",
+              "cli/verify",
+              "cli/mcp"
+            ]
+          },
+          {
+            "group": "TypeScript SDK",
+            "pages": [
+              "sdk/overview",
+              "sdk/sandboxes",
+              "sdk/exec",
+              "sdk/files",
+              "sdk/snapshots",
+              "sdk/browser-desktop",
+              "sdk/environments",
+              "sdk/errors"
+            ]
+          },
+          {
+            "group": "Platform",
+            "pages": [
+              "security",
+              "pricing",
+              "changelog"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "API reference",
+        "groups": [
+          {
+            "group": "Overview",
+            "pages": [
+              "api-reference/overview",
+              "api-reference/attach"
+            ]
+          },
+          {
+            "group": "Sandboxes",
+            "openapi": "api-reference/openapi.yaml",
+            "pages": [
+              "GET /v1/sandboxes",
+              "POST /v1/sandboxes",
+              "GET /v1/sandboxes/{id}",
+              "DELETE /v1/sandboxes/{id}",
+              "POST /v1/sandboxes/{id}/fork",
+              "POST /v1/sandboxes/{id}/stop",
+              "POST /v1/sandboxes/{id}/start",
+              "GET /v1/concurrency"
+            ]
+          },
+          {
+            "group": "Commands",
+            "openapi": "api-reference/openapi.yaml",
+            "pages": [
+              "POST /v1/sandboxes/{id}/exec",
+              "GET /v1/sandboxes/{id}/attach"
+            ]
+          },
+          {
+            "group": "Browser and desktop",
+            "openapi": "api-reference/openapi.yaml",
+            "pages": [
+              "PATCH /v1/sandboxes/{id}/features",
+              "GET /v1/sandboxes/{id}/browser",
+              "GET /v1/sandboxes/{id}/desktop",
+              "GET /v1/sandboxes/{id}/desktop/screenshot",
+              "POST /v1/sandboxes/{id}/desktop/actions",
+              "POST /v1/sandboxes/{id}/desktop/session"
+            ]
+          },
+          {
+            "group": "Snapshots",
+            "openapi": "api-reference/openapi.yaml",
+            "pages": [
+              "GET /v1/snapshots",
+              "POST /v1/snapshots",
+              "POST /v1/snapshots/{id}/restore",
+              "DELETE /v1/snapshots/{id}"
+            ]
+          },
+          {
+            "group": "Images",
+            "openapi": "api-reference/openapi.yaml",
+            "pages": [
+              "GET /v1/images",
+              "POST /v1/images",
+              "GET /v1/images/{id}",
+              "GET /v1/images/{id}/logs",
+              "DELETE /v1/images/{id}"
+            ]
+          },
+          {
+            "group": "Environments",
+            "openapi": "api-reference/openapi.yaml",
+            "pages": [
+              "GET /v1/environments",
+              "POST /v1/environments",
+              "DELETE /v1/environments/{id}",
+              "GET /v1/environments/{id}/variables",
+              "PUT /v1/environments/{id}/variables/{name}",
+              "DELETE /v1/environments/{id}/variables/{name}",
+              "GET /v1/environments/{id}/secrets",
+              "PUT /v1/environments/{id}/secrets/{name}",
+              "DELETE /v1/environments/{id}/secrets/{name}"
+            ]
+          },
+          {
+            "group": "Flight recorder",
+            "openapi": "api-reference/openapi.yaml",
+            "pages": [
+              "GET /v1/sandboxes/{id}/timeline",
+              "GET /v1/sandboxes/{id}/stats"
+            ]
+          },
+          {
+            "group": "Attestation",
+            "openapi": "api-reference/openapi.yaml",
+            "pages": [
+              "GET /v1/sandboxes/{id}/attestation",
+              "GET /v1/regions/{region}/attestation"
+            ]
+          },
+          {
+            "group": "Agents",
+            "openapi": "api-reference/openapi.yaml",
+            "pages": [
+              "GET /v1/agents",
+              "POST /v1/agents/credentials",
+              "DELETE /v1/agents/credentials/{provider}",
+              "PATCH /v1/agents/settings"
+            ]
+          },
+          {
+            "group": "Proxying",
+            "openapi": "api-reference/openapi.yaml",
+            "pages": [
+              "GET /v1/proxying",
+              "POST /v1/proxying/keys",
+              "DELETE /v1/proxying/keys/{key}",
+              "POST /v1/proxying/keys/order",
+              "PATCH /v1/proxying/settings"
+            ]
+          },
+          {
+            "group": "Webhooks",
+            "openapi": "api-reference/openapi.yaml",
+            "pages": [
+              "GET /v1/webhooks",
+              "POST /v1/webhooks",
+              "GET /v1/webhooks/{id}",
+              "PATCH /v1/webhooks/{id}",
+              "DELETE /v1/webhooks/{id}",
+              "POST /v1/webhooks/{id}/rotate-secret",
+              "POST /v1/webhooks/{id}/test",
+              "GET /v1/webhooks/{id}/deliveries",
+              "POST /v1/webhooks/{id}/deliveries/{delivery_id}/resend"
+            ]
+          },
+          {
+            "group": "OpenTelemetry",
+            "openapi": "api-reference/openapi.yaml",
+            "pages": [
+              "GET /v1/otel",
+              "PATCH /v1/otel",
+              "DELETE /v1/otel",
+              "POST /v1/otel/test"
+            ]
+          },
+          {
+            "group": "Alerts",
+            "openapi": "api-reference/openapi.yaml",
+            "pages": [
+              "GET /v1/alerts",
+              "PATCH /v1/alerts",
+              "GET /v1/alerts/channels",
+              "POST /v1/alerts/channels",
+              "PATCH /v1/alerts/channels/{id}",
+              "DELETE /v1/alerts/channels/{id}",
+              "POST /v1/alerts/channels/{id}/test",
+              "GET /v1/alerts/rules",
+              "POST /v1/alerts/rules",
+              "PATCH /v1/alerts/rules/{id}",
+              "DELETE /v1/alerts/rules/{id}",
+              "GET /v1/alerts/deliveries"
+            ]
+          },
+          {
+            "group": "CI",
+            "openapi": "api-reference/openapi.yaml",
+            "pages": [
+              "GET /v1/ci",
+              "GET /v1/ci/jobs",
+              "PATCH /v1/ci/settings"
+            ]
+          },
+          {
+            "group": "Usage and billing",
+            "openapi": "api-reference/openapi.yaml",
+            "pages": [
+              "GET /v1/usage",
+              "GET /v1/usage.csv",
+              "GET /v1/billing",
+              "PATCH /v1/billing",
+              "GET /v1/billing/invoices"
+            ]
+          },
+          {
+            "group": "Workspace",
+            "openapi": "api-reference/openapi.yaml",
+            "pages": [
+              "GET /v1/whoami",
+              "GET /v1/org",
+              "PATCH /v1/org",
+              "GET /v1/members",
+              "PATCH /v1/members/{id}",
+              "DELETE /v1/members/{id}",
+              "GET /v1/invites",
+              "POST /v1/invites",
+              "POST /v1/invites/{id}/resend",
+              "DELETE /v1/invites/{id}",
+              "GET /v1/tokens",
+              "POST /v1/tokens",
+              "DELETE /v1/tokens/{id}",
+              "GET /v1/audit",
+              "GET /v1/audit.csv"
+            ]
+          },
+          {
+            "group": "Platform",
+            "openapi": "api-reference/openapi.yaml",
+            "pages": [
+              "GET /v1/status"
+            ]
+          }
+        ]
+      }
+    ]
   },
   "contextual": {
     "options": [
@@ -56,17 +317,30 @@
       "view",
       "chatgpt",
       "claude",
-      "perplexity",
-      "mcp",
       "cursor",
-      "vscode"
+      "vscode",
+      "mcp"
     ]
   },
   "footer": {
-    "socials": {
-      "x": "https://x.com/mintlify",
-      "github": "https://github.com/mintlify",
-      "linkedin": "https://linkedin.com/company/mintlify"
-    }
+    "links": [
+      {
+        "header": "Zode",
+        "items": [
+          {
+            "label": "Website",
+            "href": "https://zode.dev"
+          },
+          {
+            "label": "Console",
+            "href": "https://console.zode.dev"
+          },
+          {
+            "label": "Contact",
+            "href": "mailto:hello@zode.dev"
+          }
+        ]
+      }
+    ]
   }
 }
