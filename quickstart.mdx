@@ -1,47 +1,135 @@
 ---
 title: "Quickstart"
-description: "Begin with a guide on the fastest path to a successful outcome"
+description: "Install the zode CLI, make a sandbox, run a command in it, fork it, then do the same from TypeScript or curl."
 ---
 
-Describe how someone begins using your product. What is the first thing they need to do? Are there any prerequisites?
+You need a Zode account and a Linux or macOS machine (amd64 or arm64).
 
-A quickstart should take someone from zero to using your product. They'll get a quick win and a sense of what they can accomplish.
-
-## Prerequisites
-
-Before you begin, you must have:
-
-- Requirement one (for example, Node.js 18+, a free account, an API key)
-- Requirement two (for example, a compatible device, a compatible browser, a compatible operating system)
-
-## Get started
+## With the CLI
 
 <Steps>
-  <Step title="Install">
-    Describe how to install your product or sign up.
-
+  <Step title="Install the CLI">
     ```bash
-    npm install your-package
+    curl -fsSL https://zode.dev/install | sh
     ```
+
+    The script checks the SHA-256 of the download and installs `zode` to `/usr/local/bin` if it can write there, otherwise to `~/.local/bin`. Set `ZODE_INSTALL_DIR` to choose another directory.
   </Step>
-  <Step title="Configure">
-    Describe any setup or configuration needed before first use.
-
+  <Step title="Sign in">
     ```bash
-    your-cli init
+    zode login
     ```
+
+    `zode login` opens your browser and prints a code. Confirm the code in the browser, and the CLI saves a token for that workspace. `zode whoami` shows who and where you are signed in.
   </Step>
-  <Step title="Run it">
-    Show the first thing a user does to see it working.
-
+  <Step title="Make a sandbox">
     ```bash
-    your-cli start
+    zode new demo
     ```
+
+    Without `--size` you get a `small` sandbox: 2 vCPU, 4 GB RAM, 50 GB disk. The command returns once the sandbox is running and prints its size, region and how long the create took.
+  </Step>
+  <Step title="Run a command">
+    ```bash
+    zode exec demo -- uname -a
+    ```
+
+    `zode exec` streams the output and exits with the command's exit code.
+  </Step>
+  <Step title="Open a shell">
+    ```bash
+    zode ssh demo
+    ```
+
+    You get a login shell in the sandbox. Type `exit` to leave; the sandbox keeps running.
+  </Step>
+  <Step title="Fork it">
+    ```bash
+    zode fork demo demo-2
+    ```
+
+    `demo-2` is a new running sandbox with a copy of `demo`'s memory and disk. Processes running in `demo` are running in `demo-2` too.
+  </Step>
+  <Step title="Stop one, delete the other">
+    ```bash
+    zode stop demo
+    zode rm demo-2
+    ```
+
+    `zode stop` hibernates `demo`: its disk and memory are kept and compute billing stops. `zode start demo` wakes it. `zode rm` deletes `demo-2` and its disk for good.
   </Step>
 </Steps>
 
-<Tip>
-  Give people a way to get help. This could be a link to a support page, a chat with a customer support agent, or a forum for your product.
+<Note>
+  The Free plan runs at most 2 sandboxes at once. After the fork step, `demo` and `demo-2` use both slots. A third create, fork or start fails with "Your free plan runs at most 2 sandboxes at once. Stop one first." Stopped sandboxes do not count.
+</Note>
 
-  Example: Need help? Reach out to us at [support@yourcompany.com](mailto:support@yourcompany.com).
-</Tip>
+## From TypeScript or curl
+
+Both need an API key. Create one in the [console](https://console.zode.dev) under **Settings** > **API keys**, then export it:
+
+```bash
+export ZODE_API_KEY=zode_tok_...
+```
+
+The TypeScript SDK needs Node 22 or later:
+
+```bash
+npm i @zodedev/sdk
+```
+
+These examples do the same steps as the CLI. If `demo` from the CLI steps still exists, run `zode rm demo` first or pick another name: names do not have to be unique, but the CLI then asks you for the id.
+
+<CodeGroup>
+
+```ts TypeScript
+import { Sandbox } from "@zodedev/sdk";
+
+// Reads ZODE_API_KEY from the environment.
+const sbx = await Sandbox.create({ name: "demo", vcpus: 2 });
+
+const r = await sbx.exec("uname -a");
+console.log(r.exit_code, r.stdout);
+
+const copy = await sbx.fork({ name: "demo-2" });
+await sbx.stop();
+await copy.delete();
+```
+
+```bash curl
+API=https://api.zode.dev
+AUTH="Authorization: Bearer $ZODE_API_KEY"
+
+# Create: returns the sandbox once it is running
+ID=$(curl -sS -X POST $API/v1/sandboxes -H "$AUTH" \
+  -H "Content-Type: application/json" \
+  -d '{"name":"demo","vcpus":2}' | jq -r .id)
+
+# Run a command: returns exit_code, stdout, stderr and duration_ms
+curl -sS -X POST $API/v1/sandboxes/$ID/exec -H "$AUTH" \
+  -H "Content-Type: application/json" \
+  -d '{"command":"uname -a"}'
+
+# Fork, stop the parent, delete the fork
+FORK=$(curl -sS -X POST $API/v1/sandboxes/$ID/fork -H "$AUTH" \
+  -H "Content-Type: application/json" \
+  -d '{"name":"demo-2"}' | jq -r .id)
+curl -sS -X POST $API/v1/sandboxes/$ID/stop -H "$AUTH"
+curl -sS -X DELETE $API/v1/sandboxes/$FORK -H "$AUTH"
+```
+
+</CodeGroup>
+
+In the API and SDK you pick a size by `vcpus`: 2, 4, 8 or 16. RAM and disk follow the size. A string command runs under `bash -lc`. The buffered exec route stops a command after 55 seconds; for longer or interactive work, see [Sandboxes](/concepts/sandboxes#exec-and-attach).
+
+Errors come back as JSON with a stable code, for example:
+
+```json
+{"error": {"code": "concurrency_limit", "message": "Your free plan runs at most 2 sandboxes at once. Stop one first."}}
+```
+
+## Next
+
+- [Sandboxes](/concepts/sandboxes): lifecycle, statuses, limits and billing.
+- [Snapshots and fork](/concepts/snapshots-and-fork): copy a sandbox or roll it back.
+- [CLI overview](/cli/overview) and [TypeScript SDK](/sdk/overview).

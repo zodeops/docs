@@ -1,0 +1,131 @@
+---
+title: "API overview"
+description: "Base URL, API keys, errors, rate limits, pagination, ids, timestamps and money in the Zode HTTP API."
+---
+
+The Zode API is JSON over HTTPS. Every endpoint is listed in the sections in the sidebar; this page covers what they share.
+
+```text
+https://api.zode.dev
+```
+
+All routes start with `/v1`. Request and response bodies are JSON unless an endpoint says otherwise (screenshots are PNG, `/v1/usage.csv` is CSV).
+
+## Authentication
+
+Send an API key as a bearer token on every request:
+
+```bash
+curl https://api.zode.dev/v1/sandboxes \
+  -H "Authorization: Bearer $ZODE_API_KEY"
+```
+
+Keys look like `zode_tok_` followed by 64 hex characters. Create one in the console under **Settings**, **API keys**, or with `POST /v1/tokens`. The secret is shown once, in the create response.
+
+```bash
+curl https://api.zode.dev/v1/tokens \
+  -H "Authorization: Bearer $ZODE_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"name": "ci", "scope": "sandboxes", "expires_in_days": 90}'
+```
+
+Creating a key with an API key needs the owner or admin role. `scope` limits what the key may call:
+
+| Scope | Allows |
+|---|---|
+| `full` (default) | Everything the member's role allows. |
+| `read_only` | `GET` and `HEAD` only, and no attach sessions. |
+| `sandboxes` | Only `/v1/sandboxes...` routes and `/v1/whoami`. |
+
+A call outside the scope gets `403 token_scope`. Leave out `expires_in_days` for a key that never expires; otherwise it is 1 to 365. Revoke a key with `DELETE /v1/tokens/{id}` or in the console; it then gets `401` like an unknown key. `zode login` also creates a key, for the CLI.
+
+### Workspace
+
+A key belongs to one member of one workspace, and every call acts in that workspace with that member's role. You do not pass a workspace id. If you send an `X-Zode-Org` header anyway, it must match the key's workspace (`org_...`), or the call gets `403 forbidden`.
+
+## Errors
+
+Every error has the same shape:
+
+```json
+{
+  "error": {
+    "code": "invalid_state",
+    "message": "sandbox is stopped; start it to connect"
+  }
+}
+```
+
+Branch on `code`, which is stable. `message` is for people and may change. Common codes:
+
+| Status | Code | Meaning |
+|---|---|---|
+| 400 | `invalid_request`, `bad_request` | A parameter or body field is missing or out of range. |
+| 401 | `unauthorized` | Missing, unknown, expired or revoked key. |
+| 403 | `forbidden` | Your role may not do this, or `X-Zode-Org` does not match the key. |
+| 403 | `token_scope` | The key's scope does not cover this call. |
+| 403 | `plan_required` | Your plan does not include this feature, for example the desktop on Free. Audit-log CSV export answers 402 with the same code. |
+| 404 | `not_found` | No such resource in this workspace. |
+| 409 | `invalid_state` | The sandbox is in the wrong status, for example exec on a stopped sandbox. |
+| 409 | `concurrency_limit` | Your plan's running-sandbox limit is reached. Stop one first. |
+| 409 | `name_taken` | A resource with that name exists. |
+| 409 | `limit_reached` | A count limit is reached, such as images kept on your plan. |
+| 409 | `browser_off`, `desktop_off` | Switch the feature on first. |
+| 409 | `node_full` | The host has no room to start, fork or wake this sandbox now. |
+| 429 | `rate_limited` | Too many requests. See below. |
+| 500 | `internal` | An unexpected server error. |
+| 502 | `node_error` | The host failed the operation. |
+| 503 | `no_capacity` | No host in the region can take the request right now. Retry shortly. |
+
+Each endpoint page lists the statuses it can return.
+
+## Rate limits
+
+Making sandboxes (create and fork together) is limited per hour:
+
+| Per | Limit |
+|---|---|
+| Signed-in user, or the member behind an API key | 30 |
+| Workspace | 60 |
+| Client IP address | 60 |
+
+Over a limit, the API answers `429 rate_limited` with a `Retry-After` header: the seconds until you may try again. A few other routes have their own limits and answer the same way, for example member invites (30 per workspace per hour) and alert channel tests (10 per channel per minute). There are no `X-RateLimit-*` headers.
+
+The plan's running-sandbox limit is separate: it answers `409 concurrency_limit`, not 429. `GET /v1/concurrency` returns `running`, `limit` and `plan`.
+
+## Pagination
+
+Most list endpoints, such as `GET /v1/sandboxes`, return every item in one response. The ones that page:
+
+| Endpoint | Page size | Next page |
+|---|---|---|
+| `GET /v1/sandboxes/{id}/timeline` | `limit`, 1 to 5000, default 500 | Pass the response's `next` as `cursor`. No `next` means the last page. |
+| `GET /v1/audit` | `limit`, 1 to 500, default 50 | Pass `next_before` as `before`. |
+| `GET /v1/webhooks/{id}/deliveries` | `limit`, 1 to 100, default 50 | Pass `next_before` as `before`. |
+| `GET /v1/images/{id}/logs` | by bytes | Pass `next` as `offset` until `done` is `true`. |
+
+## Ids
+
+Ids are a prefix, an underscore and 16 characters from `a-z` and `2-7`, such as `sbx_q3vfn7tkx2mhcw4a`.
+
+| Prefix | Resource |
+|---|---|
+| `sbx_` | Sandbox |
+| `img_` | Custom image |
+| `snp_` | Snapshot |
+| `env_` | Environment |
+| `tok_` | API key (the id, not the secret) |
+| `org_` | Workspace |
+| `mem_` | Member |
+| `inv_` | Invite |
+| `whk_` | Webhook |
+
+Where a route takes a sandbox or image, it takes the id; images also accept their name.
+
+## Timestamps
+
+Timestamps are RFC 3339 strings in UTC, such as `2026-11-11T11:02:00Z`. Usage and billing ranges use whole UTC days as `YYYY-MM-DD`.
+
+## Money
+
+Amounts are integers in micro-dollars, in fields ending in `_micros`. 1 USD is 1,000,000 micros, so `"compute_micros": 2804` is $0.002804. AI provider spend appears in `ai_micros` for reporting and is not billed.

@@ -1,0 +1,97 @@
+---
+title: "Pricing"
+description: "What Zode charges for compute and storage, what each plan includes, and how billing works per second."
+---
+
+You pay for compute while a sandbox runs and for the storage it holds. Plans add a monthly fee, included usage and higher limits. Prices are in US dollars.
+
+## Compute
+
+Compute costs **$0.00875 per vCPU-hour**, billed per second while a sandbox is running. Each vCPU comes with 2 GB of RAM at no extra charge.
+
+| Size | vCPU | RAM | Disk | Per hour | Per 8-hour day |
+|---|---|---|---|---|---|
+| small | 2 | 4 GB | 50 GB | $0.0175 | $0.14 |
+| default | 4 | 8 GB | 50 GB | $0.035 | $0.28 |
+| large | 8 | 16 GB | 110 GB | $0.070 | $0.56 |
+| xlarge | 16 | 32 GB | 250 GB | $0.140 | $1.12 |
+
+A stopped sandbox costs nothing for compute. `zode new` without `--size`, and the API and SDK without `vcpus`, make a **small** sandbox.
+
+## Storage
+
+Storage costs **$0.10 per GB-month** of the sandbox's disk size. A GB is 10⁹ bytes and a month is 730 hours; storage is prorated per second. Storage is billed from create until delete, running or stopped.
+
+| Size | Disk | Storage per month |
+|---|---|---|
+| small | 50 GB | $5.00 |
+| default | 50 GB | $5.00 |
+| large | 110 GB | $11.00 |
+| xlarge | 250 GB | $25.00 |
+
+<Warning>
+Stopping a sandbox ends its compute charge, not its storage charge. Delete sandboxes you no longer need.
+</Warning>
+
+## AI usage
+
+AI calls from a sandbox go out on your own provider keys. They are not on your invoice, and Zode adds no markup. Usage reports have a column for AI spend by repository, branch and pull request, but it reads $0 for now: the hosts do not record AI calls yet.
+
+## Plans
+
+| | Free | Pro | Team | Enterprise |
+|---|---|---|---|---|
+| Monthly fee | $0 | $20 | $100 | Contract |
+| Included usage | $10 one-time credit, after a card check | $20 a month, no rollover | None | Contract |
+| Sandboxes running at once | 2 | 15 | 50 | Per contract |
+| Browser (Chrome over CDP) | Yes | Yes | Yes | Yes |
+| Linux desktop | No | Yes | Yes | Yes |
+| Custom images kept / building at once | 3 / 1 | 20 / 2 | 100 / 4 | Unlimited |
+| Flight recorder retention | 7 days | 30 days | 90 days | 90 days |
+| Audit log CSV export | No | No | Yes | Yes |
+
+- **Included usage** covers compute and storage. On Pro, the $20 resets each month; unused usage does not carry over. Usage past it is billed at the rates above.
+- **Free credit** is granted once per workspace when you first save a card.
+- **Running at once** counts sandboxes that are creating, running or starting. Over the limit, a create, fork or start fails: "Your free plan runs at most 2 sandboxes at once. Stop one first."
+- **Desktop on Free** fails with `plan_required` (403): "the free plan does not include the desktop; upgrade in Billing".
+
+A workspace on Free can start a 7-day Pro trial in **Billing** once, with no card. During the trial the desktop is available; Pro's fee and included usage do not apply, and nothing is charged when it ends.
+
+## What is billed per second
+
+| Item | Billed while | Rate |
+|---|---|---|
+| Compute | The sandbox is running | $0.00875 per vCPU-hour |
+| Storage | The sandbox exists, running or stopped | $0.10 per GB-month of disk size |
+| AI provider spend | Never | Shown, not billed |
+
+Creating, stopping, starting, forking and snapshotting have no fee of their own. A fork is a running sandbox and bills compute like any other.
+
+## Caps
+
+You can bound spend before it happens:
+
+- **Per sandbox**: `max_cost_micros` on create or fork (`maxCostMicros` in the SDK), in micro-dollars, where $1 is 1,000,000. It caps the sandbox's AI calls through Zode, not its compute or storage. A workspace can set a default for new sandboxes.
+- **Per workspace per day**: a daily cap in **Billing**. Once today's spend reaches it, creates, forks and starts fail with `daily_cap_reached` until 00:00 UTC or until you raise it.
+
+See [Spend and caps](/concepts/spend-and-caps) for what happens when a cap is reached.
+
+## Check your spend
+
+```bash
+zode cost
+```
+
+```text
+2026-11-05 to 2026-11-11 UTC, as of 2026-11-11 11:04
+
+billed      $0.006163   compute $0.003293   storage $0.002870
+AI          $0.000000 in 0 calls, shown, not billed
+sandboxes   0.188 h, peak 2 at once, 7 forks (p95 17876 ms)
+events      0 OOM kills, 0 breaker trips
+
+REPO     BILLED      AI          HOURS
+(none)   $0.006163   $0.000000   0.188
+```
+
+The console's **Usage** page and `GET /v1/usage` show the same numbers. See [zode cost](/cli/cost).

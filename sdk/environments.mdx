@@ -1,0 +1,90 @@
+---
+title: "Environments"
+description: "Manage environments, variables and vault secrets with zode.environments, and start sandboxes in an environment."
+---
+
+An environment is a named set of variables and secrets. Every workspace has one called `default`. A sandbox reads its environment at the start of every `exec` and `spawn` session, so a change applies to the next command without a restart. See [Environments and secrets](/concepts/environments-and-secrets).
+
+```ts
+import { Sandbox, Zode } from "@zodedev/sdk";
+
+const zode = new Zode();
+await zode.environments.create("ci");
+await zode.environments.setVariable("ci", "NODE_ENV", "test");
+await zode.environments.setSecret("ci", "STRIPE_KEY", {
+  value: process.env.STRIPE_KEY!,
+  allowedHosts: ["api.stripe.com"],
+});
+
+const sbx = await Sandbox.create({ environment: "ci" });
+console.log((await sbx.exec("echo $NODE_ENV $STRIPE_KEY")).stdout);
+// test zode_vault_...
+```
+
+## Start a sandbox in an environment
+
+`Sandbox.create({ environment })` takes an environment id (`env_...`) or name. Left out, the sandbox uses `default`. An unknown id or name fails with `unknown_environment` (400). A fork keeps its parent's environment.
+
+## zode.environments
+
+Every method that takes `env` accepts an id or a name.
+
+| Method | Returns |
+|---|---|
+| `list()` | `Promise<Environment[]>` |
+| `create(name)` | `Promise<Environment>` |
+| `delete(id)` | `Promise<void>`. Takes an `env_` id only |
+| `resolve(idOrName)` | `Promise<string>`: the environment's id |
+| `variables(env)` | `Promise<Variable[]>` |
+| `setVariable(env, name, value)` | `Promise<Variable>`. Creates or replaces |
+| `deleteVariable(env, name)` | `Promise<void>` |
+| `secrets(env)` | `Promise<Secret[]>`. Names and hosts, never values |
+| `setSecret(env, name, { value?, allowedHosts })` | `Promise<Secret>`. Creates or replaces |
+| `deleteSecret(env, name)` | `Promise<void>` |
+
+Environment names follow the sandbox name rules: lowercase letters, digits and `-`, 1 to 63 characters, not starting or ending with `-`.
+
+`resolve` returns a well-formed id unchanged and looks names up with `list()`. A name with no match throws `ZodeError` `not_found` (404). The `default` environment cannot be deleted. To delete by name, resolve first:
+
+```ts
+await zode.environments.delete(await zode.environments.resolve("ci"));
+```
+
+## Variables
+
+Variables are plain values. Anyone in the workspace who can run sandboxes can read them.
+
+- Names are letters, digits and `_`, do not start with a digit, and are at most 128 characters. Names starting with `ZODE_` are reserved.
+- A value is UTF-8 text without NUL bytes, at most 4096 bytes.
+- An environment holds at most 100 variables, with values totalling at most 32 KB.
+
+The `env` option of `exec` and `spawn` adds variables for one command; they win over the environment's on a name clash.
+
+## Secrets
+
+The sandbox never sees a secret's value. It sees a placeholder, `zode_vault_...`, in the variable of that name. When a request leaves the sandbox over TLS to one of the secret's `allowedHosts`, the host's egress proxy swaps the placeholder for the real value. Requests to any other host carry the placeholder unchanged.
+
+```ts
+await zode.environments.setSecret("ci", "OPENAI_API_KEY", {
+  value: process.env.OPENAI_API_KEY!,
+  allowedHosts: ["api.openai.com"],
+});
+
+// change only the allowlist; the stored value stays
+await zode.environments.setSecret("ci", "OPENAI_API_KEY", {
+  allowedHosts: ["api.openai.com", "*.openai.azure.com"],
+});
+```
+
+- `allowedHosts` needs 1 to 20 host names, such as `api.stripe.com` or `*.example.com`, without scheme or port.
+- `value` is required for a new secret and optional when you update one. It is UTF-8 text without NUL bytes, at most 16 KB.
+- An environment holds at most 50 secrets. A secret and a variable in the same environment cannot share a name.
+- Values are encrypted at rest. `secrets()` returns `name`, `allowed_hosts`, `created_at`, `updated_at`, `updated_by` and `last_used_at`.
+
+## Who can change them
+
+Owners and admins create and delete environments and set or delete variables and secrets. Members can list environments and read variables and secret names. The billing role sees none of it. Other roles get `forbidden` (403).
+
+## Limits
+
+A workspace has at most 20 environments. Going over any limit on this page fails with `limit_reached` (409); a duplicate name fails with `name_taken` (409).

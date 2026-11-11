@@ -1,0 +1,117 @@
+---
+title: "Run commands"
+description: "Run commands in a sandbox with exec, stream output, and drive long or interactive processes with spawn."
+---
+
+`sbx.exec` runs a command and waits for it. `sbx.spawn` starts a command and hands you a live handle. The sandbox must be running; otherwise both fail with `invalid_state` (409).
+
+## exec
+
+```ts
+const r = await sbx.exec("node --version");
+console.log(r.exit_code, r.stdout); // 0 "v22...\n"
+```
+
+A string runs under `bash -lc`, so pipes, `&&` and globs work. An array runs as-is, with no shell:
+
+```ts
+await sbx.exec(["git", "clone", "https://github.com/expressjs/express", "/workspace/express"]);
+```
+
+A non-zero exit is a normal result, not an error. Pass `check: true` to throw a `CommandError` (with `exitCode` and `stderr`) instead.
+
+### Options
+
+| Option | Default | Notes |
+|---|---|---|
+| `cwd` | `/workspace` | Working directory |
+| `env` | none | `Record<string, string>` added on top of the sandbox's [environment](/sdk/environments); yours win on a clash |
+| `stdin` | none | `string` or `Uint8Array`, written then closed |
+| `timeoutMs` | see below | Deadline for the command |
+| `check` | `false` | Throw `CommandError` on a non-zero exit |
+| `onStdout`, `onStderr` | none | `(chunk: Uint8Array) => void`, called as output arrives |
+| `tty` | `false` | Allocate a terminal; stdout and stderr merge |
+| `rows`, `cols` | none | Terminal size with `tty` |
+| `maxOutputBytes` | 16 MiB | Output kept per stream in the result; callbacks still see all of it |
+
+### Buffered or streamed
+
+`exec` picks one of two transports:
+
+- **Buffered** (`POST /v1/sandboxes/{id}/exec`) when none of the conditions below apply. The command runs for at most 55 s, and 30 s if you set no `timeoutMs`. Stdin is at most 1 MiB, the command string at most 16 KB, and output is cut at 1 MiB per stream (`stdout_truncated` / `stderr_truncated` say so).
+- **Streamed** over the attach WebSocket when you pass `onStdout` or `onStderr`, set `tty`, pass `stdin` as a `Uint8Array` or larger than 1 MiB, set `timeoutMs` above 55000, or set `maxOutputBytes`. There is no server-side time limit. `timeoutMs` is enforced by the SDK: it closes the session, which kills the process, and returns `timed_out: true` with `exit_code` -1. When you pass no `stdin`, the SDK closes stdin at once so commands that read it do not wait.
+
+<Warning>
+  A plain `exec("npm test")` uses the buffered route and is stopped after 30 s. For anything that may run longer, pass `timeoutMs` above 55000 or an output callback.
+</Warning>
+
+```ts
+const r = await sbx.exec("npm ci && npm test", {
+  cwd: "/workspace/app",
+  env: { CI: "1" },
+  timeoutMs: 15 * 60_000,
+  onStdout: (b) => process.stdout.write(b),
+  onStderr: (b) => process.stderr.write(b),
+});
+if (r.timed_out) console.error("tests ran past 15 minutes");
+```
+
+On the streamed route, `env` travels in a request header, never in the URL.
+
+### Result
+
+`exec` resolves with an `ExecResult`:
+
+| Field | Type | Meaning |
+|---|---|---|
+| `exit_code` | `number` | The exit code; -1 when the process was killed by a signal or timed out |
+| `signal` | `string?` | The signal that ended it, if any |
+| `timed_out` | `boolean?` | The deadline passed and the process was killed |
+| `oom_killed` | `boolean?` | The kernel killed it for running out of memory |
+| `peak_rss_mb` | `number?` | Peak memory of the process |
+| `duration_ms` | `number` | Wall time |
+| `stdout`, `stderr` | `string` | Output, decoded as UTF-8 |
+| `stdout_truncated`, `stderr_truncated` | `boolean?` | Output went past the limit and was cut |
+
+For binary output, read a file with [`files.read`](/sdk/files) or use the raw chunks from `spawn`.
+
+## spawn
+
+`sbx.spawn(command?, options?)` opens the attach WebSocket and returns a `CommandHandle` at once. A string runs under `bash -lc`, an array runs as-is, and no command opens a login shell. It takes the same options as `exec` except `check`.
+
+```ts
+const h = sbx.spawn("npm run dev", { cwd: "/workspace/app" });
+for await (const chunk of h) {
+  process.stdout.write(chunk.data);
+  if (new TextDecoder().decode(chunk.data).includes("ready")) break;
+}
+h.kill("INT");
+const r = await h.wait();
+```
+
+### CommandHandle
+
+| Member | What it does |
+|---|---|
+| `for await (const chunk of h)` | Yields `{ stream, data }` chunks until the process exits; `stream` is `"stdout"` or `"stderr"` and `data` is a `Uint8Array`. Iterate it from one place only |
+| `sendStdin(data)` | Writes a `string` (as UTF-8) or `Uint8Array` to stdin. Throws `ZodeError` `stdin_closed` after `closeStdin()` |
+| `closeStdin()` | Sends end-of-file |
+| `resize(rows, cols)` | Resizes the terminal of a `tty` session |
+| `kill(signal?)` | Sends a signal such as `"INT"`, `"TERM"` or `"KILL"`. With no signal it drops the session, which kills the process |
+| `wait()` | Resolves with the `ExecResult`, including collected output |
+| `ready()` | Resolves once the socket is open |
+
+Writes made before the socket opens are queued. If you pass `stdin` in the options, it is written and stdin is closed for you; otherwise stdin stays open until you call `closeStdin()`.
+
+`wait()` and `ready()` reject with a `ZodeError` when the session fails: `attach_failed` (the socket could not open), `attach_closed` (it closed without an exit status, which is what `kill()` with no signal causes), or `session_error` (the sandbox ended the session with an error).
+
+### Interactive shell
+
+```ts
+const shell = sbx.spawn(undefined, { tty: true, rows: 40, cols: 120 });
+shell.sendStdin("cd /workspace && ls -la\nexit\n");
+for await (const chunk of shell) process.stdout.write(chunk.data);
+console.log((await shell.wait()).exit_code);
+```
+
+Closing the session kills the process. A process you start through `exec` or `spawn` lives only as long as its session.

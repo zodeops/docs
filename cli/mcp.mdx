@@ -1,0 +1,82 @@
+---
+title: "MCP server"
+description: "Give Claude Code, Codex, Cursor or any MCP client tools to make sandboxes and work in them with zode mcp."
+---
+
+`zode mcp` runs an MCP server on stdio. Your agent starts it as a subprocess and gets nine tools for sandboxes. It acts with your `zode` sign-in, in your workspace, with your plan's limits.
+
+## Sign in first
+
+The server reads the same credentials as the CLI: the key saved by [`zode login`](/cli/overview#sign-in), or `ZODE_TOKEN` when set. With neither, it exits with `not signed in: run zode login first, then start your agent`.
+
+## Add it to your agent
+
+<Tabs>
+  <Tab title="Claude Code">
+    ```bash
+    claude mcp add zode -- zode mcp
+    ```
+  </Tab>
+  <Tab title="Codex">
+    ```bash
+    codex mcp add zode -- zode mcp
+    ```
+  </Tab>
+  <Tab title="Cursor">
+    Add this to `.cursor/mcp.json` in your project, or to `~/.cursor/mcp.json` for every project:
+
+    ```json
+    {
+      "mcpServers": {
+        "zode": {
+          "command": "zode",
+          "args": ["mcp"]
+        }
+      }
+    }
+    ```
+  </Tab>
+</Tabs>
+
+To use an API key instead of your sign-in, for example on a shared machine, give the server `ZODE_TOKEN` in its environment. In the Cursor config, add `"env": { "ZODE_TOKEN": "zode_tok_..." }` next to `args`.
+
+The server also sends the agent short instructions: work happens in `/workspace`, refer to sandboxes by name, fork to try two approaches, delete when done.
+
+## Tools
+
+Every `sandbox` parameter takes a sandbox name or `sbx_` id. Tools that return a sandbox return `name`, `id`, `status`, `size` and `region`.
+
+| Tool | Parameters | Does |
+|---|---|---|
+| `sandbox_list` | none | Lists the workspace's sandboxes. |
+| `sandbox_create` | `name`, `size` (both optional) | Makes a sandbox. `size` is `small` (default), `default`, `large` or `xlarge`. Billed while running. |
+| `sandbox_exec` | `sandbox`, `command`, `cwd`, `stdin`, `timeout_seconds`, `env` | Runs a shell command and returns its result. |
+| `sandbox_read_file` | `sandbox`, `path` | Reads a text file, up to 256 KB. |
+| `sandbox_write_file` | `sandbox`, `path`, `content` | Writes a text file, creating parent directories. |
+| `sandbox_fork` | `sandbox`, `name` (optional) | Copies a sandbox: running processes, memory and disk. |
+| `sandbox_stop` | `sandbox` | Hibernates it: memory and disk kept, compute billing stops. |
+| `sandbox_start` | `sandbox` | Wakes a stopped sandbox where it left off. |
+| `sandbox_delete` | `sandbox` | Deletes it and its disk. Cannot be undone. |
+
+### sandbox_exec
+
+| Parameter | Type | Notes |
+|---|---|---|
+| `sandbox` | string | Required. |
+| `command` | string | Required. Runs with `bash -lc` as root. |
+| `cwd` | string | Working directory. Default `/workspace`. |
+| `stdin` | string | Text fed to the command's stdin. stdin is closed after it. |
+| `timeout_seconds` | integer | Kill the command after this long. Default 600, max 3600. |
+| `env` | object | Extra variables for this command, such as API keys. |
+
+It returns `exit_code`, `stdout`, `stderr`, `duration_ms`, and `timed_out` or `truncated` when they apply. Each stream is capped at 256 KB; past that, output is dropped and `truncated` is `true`. A timed-out command returns `exit_code` `-1`. For a long-running server, start it in the background (`nohup ... &`).
+
+### Paths
+
+`sandbox_read_file` and `sandbox_write_file` take an absolute path, or a path relative to `/workspace`. `sandbox_read_file` returns the file in `stdout`, with the same fields as `sandbox_exec`.
+
+## Limits
+
+- `sandbox_create` makes plain sandboxes. For a custom image, a browser or a desktop, use [`zode new`](/cli/sandboxes) and give the agent the name.
+- The tools need a running sandbox for exec and files. A stopped one gives `demo is stopped; start it first`.
+- Plan limits apply as in the CLI: on Free, at most 2 sandboxes run at once.

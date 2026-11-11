@@ -1,0 +1,146 @@
+---
+title: "Custom images"
+description: "Build an image from a Dockerfile or setup commands, then start sandboxes from it with your tools installed and your services running."
+---
+
+A custom image is a sandbox frozen after your setup ran, memory included. A sandbox made from it boots with your packages installed and your start command already running.
+
+```bash
+zode image build web -f Dockerfile
+zode new --image web
+```
+
+## Two ways to describe an image
+
+**A Dockerfile**, with `-f` (or `-f -` to read it from stdin):
+
+```bash
+zode image build web -f Dockerfile --size large
+```
+
+**Setup commands**, with flags:
+
+```bash
+zode image build tools \
+  --run "apt-get update && apt-get install -y jq" \
+  --run "pip install uv" \
+  -e PYTHONUNBUFFERED=1 \
+  --workdir /workspace
+```
+
+| Flag | Meaning |
+|---|---|
+| `--run CMD` | A setup step. Repeat it; steps run in order. |
+| `-e KEY=VALUE` | A variable kept in the image. Repeat it. |
+| `--workdir DIR` | The directory the steps run in. |
+| `--start CMD` | A command that is running when a sandbox boots. |
+| `--ready CMD` | A check for `--start`: run every second until it exits 0. |
+
+Use one form or the other, not both. Both forms also take `--size`, `--timeout` (minutes) and `--detach` (start the build and return instead of following the log).
+
+## How a Dockerfile is read
+
+A Zode image is a VM running Ubuntu 24.04 with Docker, not a container. What happens depends on the `FROM` line.
+
+### FROM zode/base or ubuntu:24.04
+
+With `FROM zode/base`, `FROM ubuntu:24.04` (also `zode`, `ubuntu:noble`), each instruction runs directly in the VM:
+
+| Instruction | What it does |
+|---|---|
+| `RUN` | Runs under `bash -lc`, as the current `USER`, in the current `WORKDIR`. Shell form, exec form and heredocs work. |
+| `ENV` | Kept for every login shell in sandboxes made from the image. |
+| `ARG` | Set during the build only. |
+| `WORKDIR` | Created, and used by the steps after it. |
+| `USER` | The steps after it run as that user, who must exist. Commands in sandboxes still run as root. |
+| `CMD`, `ENTRYPOINT` | The start command. It is started before the image is frozen, so it is already running when a sandbox boots. |
+| `HEALTHCHECK CMD` | The ready check. It runs every second after the start command until it exits 0; the build fails if it never does. Options such as `--interval` are ignored. |
+| `EXPOSE`, `LABEL`, `VOLUME`, `STOPSIGNAL`, `MAINTAINER` | Accepted with a warning; they do nothing. |
+
+Refused, with the line number: `COPY` and `ADD` (there is no build context yet; fetch files with `RUN curl` or `RUN git clone`), `ONBUILD`, `RUN --mount`, a second `FROM`, a `--platform` other than amd64, and a `SHELL` other than bash or sh.
+
+### FROM anything else
+
+With any other base, such as `node:22`, `python:3.12` or a multi-stage build, Zode runs `docker build` inside the VM. The sandbox is still the Ubuntu VM; your image sits in its Docker, with nothing left to pull at boot. If the Dockerfile has a `CMD` or `ENTRYPOINT`, the container runs as `zode-image` with the host network before the freeze.
+
+`COPY --from=<stage>` and `ADD https://...` work. Local `COPY` and `ADD` do not.
+
+## Examples
+
+A dev server that is up when the sandbox boots:
+
+```dockerfile
+FROM zode/base
+ENV APP_ENV=dev
+WORKDIR /srv/app
+RUN git clone https://github.com/acme/web.git . && npm ci
+CMD ["npm", "run", "dev"]
+HEALTHCHECK CMD curl -fsS http://127.0.0.1:3000/ || exit 1
+```
+
+A multi-stage image built with Docker:
+
+```dockerfile
+FROM python:3.12-slim AS build
+RUN pip wheel --wheel-dir /wheels requests
+
+FROM python:3.12-slim
+COPY --from=build /wheels /wheels
+RUN pip install /wheels/*
+CMD ["python", "-m", "http.server", "8000"]
+```
+
+## Size and region
+
+An image is built at one size, `small` unless you pass `--size`, and every sandbox made from it has that size and region. `zode new --image web --size large` fails with "an image has its own size; drop --size"; the API returns 400 for a mismatched `vcpus`.
+
+An image lives on the host that built it, and its sandboxes are placed there. If that host is full, create returns 503 `no_capacity`.
+
+## Builds and logs
+
+A build runs in a VM like any sandbox, with your workspace's network policy. No environment secrets reach a build.
+
+`zode image build` follows the build log until the image is `ready` or `failed`. Warnings print first as `note:` lines. To read or follow a log later:
+
+```bash
+zode image logs web -f
+```
+
+The control plane keeps the newest 512 KB of each log; older output shows as `[N bytes of log not kept]`. A failed step names its step and Dockerfile line, for example `step 2, Dockerfile line 3 (...): exited with 3`.
+
+The build time limit is 30 minutes by default, 1 to 60 with `--timeout`.
+
+## Statuses
+
+| Status | Meaning |
+|---|---|
+| `building` | The build is running. |
+| `ready` | Sandboxes can start from it. |
+| `failed` | The build failed or was cancelled. It counts against your image limit until you delete it. |
+
+Only a `ready` image starts sandboxes; others return 409 `invalid_state`.
+
+## Names and limits
+
+Image names match `^[a-z0-9][a-z0-9._-]{0,62}$` and are unique in the workspace (409 `name_taken`). Ids start with `img_`. Commands accept either.
+
+| | Free | Pro | Team | Enterprise |
+|---|---|---|---|---|
+| Images kept | 3 | 20 | 100 | unlimited |
+| Builds at once | 1 | 2 | 4 | unlimited |
+
+Over a limit you get 409 `limit_reached`. A Dockerfile is at most 64 KB, 200 steps and 16 KB per step, with at most 100 variables.
+
+## Manage images
+
+```bash
+zode image ls
+```
+
+```bash
+zode image rm web     # cancels a build, or deletes a ready or failed image
+```
+
+Sandboxes already made from an image keep running after you delete it.
+
+In the console, **Images** builds and lists images, and **New sandbox** offers your ready images. In the API, use `POST /v1/images` and pass `image` (a name or `img_` id) to `POST /v1/sandboxes`; see the [API reference](/api-reference/overview). The TypeScript SDK has no `image` option yet.

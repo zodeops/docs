@@ -1,0 +1,72 @@
+---
+title: "Files"
+description: "Read, write, list and remove files inside a sandbox with sbx.files."
+---
+
+`sbx.files` reads and writes files inside the VM. Paths are paths in the sandbox, such as `/workspace/app/package.json`. The sandbox must be running.
+
+```ts
+await sbx.files.write("/workspace/app/.env.test", "DATABASE_URL=postgres://localhost/test\n");
+const pkg = JSON.parse(await sbx.files.readText("/workspace/app/package.json"));
+console.log(await sbx.files.list("/workspace/app"));
+```
+
+## Methods
+
+| Method | Returns | What it does |
+|---|---|---|
+| `read(path)` | `Promise<Uint8Array>` | Reads a file as bytes |
+| `readText(path)` | `Promise<string>` | Reads a file and decodes it as UTF-8 |
+| `write(path, data)` | `Promise<void>` | Writes a `string` or `Uint8Array`. Creates parent directories and overwrites an existing file |
+| `list(path)` | `Promise<string[]>` | Entry names in a directory, hidden ones included, without `.` and `..` |
+| `exists(path)` | `Promise<boolean>` | Whether anything exists at the path |
+| `makeDir(path)` | `Promise<void>` | Creates a directory and its parents; an existing directory is fine |
+| `remove(path)` | `Promise<void>` | Removes a file or a whole directory tree. A missing path is not an error |
+
+## How it works
+
+The API has no file routes. The SDK runs ordinary commands in the sandbox's shell:
+
+| Method | Command | Transport |
+|---|---|---|
+| `read`, `readText` | `cat -- PATH` | attach WebSocket |
+| `write` | `mkdir -p "$(dirname PATH)" && cat > PATH`, with your data on stdin | attach WebSocket |
+| `list` | `ls -1A -- PATH` | buffered exec |
+| `exists` | `test -e PATH` | buffered exec |
+| `makeDir` | `mkdir -p -- PATH` | buffered exec |
+| `remove` | `rm -rf -- PATH` | buffered exec |
+
+What follows from that:
+
+- `read` and `write` stream over the WebSocket, so there is no size cap and binary data round-trips byte for byte.
+- `list`, `exists`, `makeDir` and `remove` use the buffered route, so each is limited to 55 s and 1 MiB of output. A directory with a very long listing comes back cut short.
+- Each call is one command. `write` does not write atomically: a reader in the sandbox can see a partly written file.
+
+To copy a directory tree, pack it in the sandbox and read the archive:
+
+```ts
+import { writeFile } from "node:fs/promises";
+
+await sbx.exec("tar -czf /tmp/dist.tgz -C /workspace/app dist", { check: true });
+await writeFile("dist.tgz", await sbx.files.read("/tmp/dist.tgz"));
+```
+
+## Errors
+
+When the command fails, the method throws a `CommandError`. It is a `ZodeError` with code `command_failed`, plus:
+
+- `exitCode`: the command's exit code
+- `stderr`: what the command printed, such as `cat: /workspace/missing.txt: No such file or directory`
+
+```ts
+import { CommandError } from "@zodedev/sdk";
+
+try {
+  await sbx.files.readText("/workspace/missing.txt");
+} catch (e) {
+  if (e instanceof CommandError) console.log(e.exitCode, e.stderr.trim());
+  else throw e;
+}
+```
+
+`exists` never throws `CommandError`: any non-zero exit from `test -e` returns `false`. Errors from the API itself, such as `invalid_state` when the sandbox is stopped, come through as plain `ZodeError`. See [Errors](/sdk/errors).

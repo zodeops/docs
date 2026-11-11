@@ -1,0 +1,143 @@
+---
+title: "Sandboxes"
+description: "Create, list, stop, start, fork and delete sandboxes with the TypeScript SDK."
+---
+
+A `Sandbox` is one microVM. You get one from `Sandbox.create`, `Sandbox.get` or `Sandbox.list`, or the same methods on `zode.sandboxes`. For what a sandbox is and how its states work, see [Sandboxes](/concepts/sandboxes).
+
+## Create
+
+`Sandbox.create(options)` resolves once the VM is running.
+
+```ts
+import { Sandbox } from "@zodedev/sdk";
+
+const sbx = await Sandbox.create({
+  name: "fix-login",
+  vcpus: 4,
+  gitRepo: "acme/web",
+  gitBranch: "fix-login",
+  prNumber: 412,
+  maxCostMicros: 2_000_000, // $2
+  environment: "ci",
+});
+console.log(sbx.id, sbx.status); // sbx_... running
+```
+
+| Option | Type | Default | Notes |
+|---|---|---|---|
+| `name` | `string` | a generated name such as `brave-hopper` | Lowercase letters, digits and `-`, 1 to 63 characters, not starting or ending with `-` |
+| `vcpus` | `number` | `2` | `2`, `4`, `8` or `16`. Picks the size; see below |
+| `region` | `string` | `eu-central` | The only region today. US East is coming soon |
+| `gitRepo` | `string` | `""` | Up to 512 characters |
+| `gitBranch` | `string` | `""` | Up to 255 characters |
+| `prNumber` | `number` | none | Must be positive |
+| `maxCostMicros` | `number` | the workspace's default sandbox cap | Spend cap in micro-dollars (1 USD = 1,000,000). See [Spend and caps](/concepts/spend-and-caps) |
+| `environment` | `string` | `default` | Environment id or name. See [Environments](/sdk/environments) |
+| `browser` | `boolean` | the workspace default | Run Chrome, driven over CDP |
+| `desktop` | `boolean` | the workspace default | Run a Linux desktop. Pro, Team and Enterprise only |
+
+`gitRepo`, `gitBranch` and `prNumber` are labels. Zode records them and groups cost by them; it does not clone the repository.
+
+### Sizes
+
+The host accepts four sizes. You pick one with `vcpus`; RAM and disk follow.
+
+| `vcpus` | RAM | Disk | Price per hour |
+|---|---|---|---|
+| 2 | 4 GB | 50 GB | $0.0175 |
+| 4 | 8 GB | 50 GB | $0.035 |
+| 8 | 16 GB | 110 GB | $0.070 |
+| 16 | 32 GB | 250 GB | $0.140 |
+
+The options type also has `ramMb` and `diskGb`. Leave them out. If you pass them, they must equal the chosen size's values (for example `ramMb: 8192` with `vcpus: 4`); any other value is refused with `invalid_request` and a message that lists the available sizes.
+
+### Custom images
+
+`Sandbox.create` has no `image` option yet. The API accepts `image` (an `img_` id or image name), so call it through `zode.request` and load the result:
+
+```ts
+import { Zode, type SandboxInfo } from "@zodedev/sdk";
+
+const zode = new Zode();
+const info = await zode.request<SandboxInfo>("POST", "/v1/sandboxes", { image: "node-pg", name: "from-image" });
+const sbx = await zode.sandboxes.get(info.id);
+```
+
+The image fixes the size and region. Sending a `vcpus` that differs from the image's is refused. See [Custom images](/concepts/images).
+
+### When a create is refused
+
+Common refusals, all thrown as `ZodeError` (details in [Errors](/sdk/errors)):
+
+- `concurrency_limit` (409): the plan's running-sandbox limit is reached. Stop one first.
+- `rate_limited` (429): too many creates recently.
+- `daily_cap_reached` (409): the workspace's daily spend cap is reached.
+- `no_capacity` (503): no host in the region has room right now.
+- `plan_required` (403): you asked for the desktop on the Free plan.
+- `unknown_environment` (400): no environment with that id or name.
+
+If the host cannot switch the browser or desktop on, the sandbox is still created with that switch off. Check `sbx.browser.enabled` and `sbx.desktop.enabled` after a create.
+
+## Get and list
+
+`Sandbox.get(id)` takes an `sbx_` id, not a name, and returns deleted sandboxes too.
+
+`Sandbox.list(filters)` returns the workspace's sandboxes that are not deleted, oldest first. Every filter takes one value or an array.
+
+| Filter | Values |
+|---|---|
+| `status` | `creating`, `running`, `stopping`, `stopped`, `starting`, `deleting`, `error` |
+| `region` | region names, such as `eu-central` |
+| `createdBy` | member ids (`mem_...`), `me`, or `none` |
+
+```ts
+const mine = await Sandbox.list({ status: ["running", "stopped"], createdBy: "me" });
+const byName = mine.find((s) => s.name === "fix-login");
+```
+
+## Refresh
+
+`await sbx.refresh()` re-reads the record from the API. Other calls update `sbx.record` on their own; refresh when something else may have changed the sandbox.
+
+## Stop and start
+
+```ts
+await sbx.stop();  // status "stopped"
+await sbx.start(); // status "running"
+```
+
+`stop()` hibernates the sandbox: its memory is saved to disk and the VM exits. Compute billing stops; storage is still billed. Only a running sandbox can be stopped.
+
+`start()` brings a stopped sandbox back on the same host. It counts against the plan's running limit, and it fails with `node_full` (409) when that host has no free memory; retry shortly. Both calls throw `invalid_state` (409) from the wrong state.
+
+## Delete
+
+`await sbx.delete()` deletes the sandbox, its disk and its snapshots. It cannot be undone.
+
+## Wait until running
+
+`create`, `start` and `fork` already resolve once the sandbox is running. Use `waitUntilRunning` for a sandbox you loaded while it was `creating` or `starting`:
+
+```ts
+const sbx = await Sandbox.get("sbx_ilvsd743b36wqi26");
+await sbx.waitUntilRunning({ timeoutMs: 60_000, intervalMs: 500 });
+```
+
+It polls every `intervalMs` (default 1000) and gives up after `timeoutMs` (default 120000) with a `TimeoutError`. It throws `ZodeError` `invalid_state` at once if the sandbox is `stopped`, `error`, `deleting` or `deleted`.
+
+## Fork
+
+`sbx.fork(options)` makes a copy-on-write copy of the sandbox, memory and disk included, and resolves with the new running `Sandbox`.
+
+```ts
+const attempt = await sbx.fork({ name: "fix-login-try-2", gitBranch: "fix-login-2" });
+```
+
+| Option | Default |
+|---|---|
+| `name` | a generated name |
+| `gitBranch`, `prNumber`, `maxCostMicros` | the parent's |
+| `browser`, `desktop` | the parent's |
+
+The fork always keeps the parent's size, region, repository and environment. The parent must be running or stopped. A fork lands on the parent's host, so it can fail with `node_full`; it also counts against the plan's running limit and the create rate. See [Snapshots and fork](/concepts/snapshots-and-fork).

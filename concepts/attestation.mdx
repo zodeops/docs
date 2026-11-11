@@ -1,0 +1,106 @@
+---
+title: "Attestation"
+description: "Check for yourself which signed release a sandbox's host runs, using the public Sigstore Rekor log and, where present, a TPM quote."
+---
+
+Attestation lets you check, with your own copy of the CLI, what software the host under your sandbox runs before you trust it with secrets.
+
+<Warning>
+The hosts do not have a signed release installed yet, so `zode verify` reports every host as **NOT verified** today. Signed host releases are rolling out, and the CLI will need an update that carries the Zode release key. Do not treat any sandbox as attested until `zode verify` says `verified`.
+</Warning>
+
+## What it proves
+
+Each host is meant to run a **host release**: a JSON manifest listing the SHA-256 of every file the host runs as trusted code. Zode signs the manifest with its release key, and the signature is recorded in the public [Sigstore Rekor](https://docs.sigstore.dev/logging/overview/) transparency log. `zode verify` checks:
+
+1. The signature on the manifest verifies with the Zode release key built into the CLI.
+2. The Rekor entry records that same digest, signature and key.
+3. The inclusion proof leads from the entry to a log checkpoint signed by a trusted Rekor key, at a valid time.
+4. Every file in the manifest was measured on the host with the same digest. The host measures its own running binary, not the file on disk.
+5. On hosts with a TPM: the TPM's quote over the boot measurements carries a random nonce the CLI made for this check, so it cannot be replayed, and the measurements match the release.
+
+The CLI checks the report itself and ignores the server's own verdict.
+
+A host's result has one of three classes:
+
+| Class | Release signed and in the public log | The host runs those files |
+|---|---|---|
+| `tpm_quoted` | proven by the CLI | proven by a TPM quote over the boot chain |
+| `signed_image` | proven by the CLI | the host's own report |
+| `none` | no signed release | nothing proven |
+
+On a `signed_image` host, a root compromise of the host could fake the measurements; the log still guarantees that whatever Zode shipped is public. A host is only shown as `tpm_quoted` when its quote checks out and its TPM key is anchored, which is not built yet, so TPM hosts report as `signed_image` for now.
+
+## Run it
+
+`zode verify` takes a sandbox (name or `sbx_` id) or a region. With a region it checks every active host there. The exit status is 1 when any host does not verify, so scripts can gate on it.
+
+What it prints today:
+
+```bash
+$ zode verify eu-central
+eu-central host-f965c0a7: NOT verified
+  fail  the host has no signed release installed (no release manifest installed: open /etc/zode/host-release.json: no such file or directory)
+
+eu-central host-1cf5d8bb: NOT verified
+  fail  the host has no signed release installed (no release manifest installed: open /etc/zode/host-release.json: no such file or directory)
+```
+
+A verified host prints each passed check, any limits of its class, and a link to its Rekor entry on `search.sigstore.dev`. Hosts are named by a short hash, never by internal name.
+
+`--json` prints the verdicts (first host shown):
+
+```bash
+$ zode verify eu-central --json
+{
+  "hosts": [
+    {
+      "host": "host-f965c0a7",
+      "region": "eu-central",
+      "verdict": {
+        "ok": false,
+        "class": "none",
+        "claimed": "none",
+        "checks": null,
+        "problem": "the host has no signed release installed (no release manifest installed: open /etc/zode/host-release.json: no such file or directory)"
+      }
+    }
+  ]
+}
+```
+
+### Check a release file offline
+
+Auditors can check a release manifest and its Sigstore bundle without any host, which checks the signature and the log entry only:
+
+```bash
+zode verify --manifest host-release.json --bundle host-release.bundle.json
+```
+
+`ZODE_RELEASE_KEY` replaces the built-in release key, for staging. The CLI warns on every run when it is set.
+
+## The API
+
+The API relays what the host reports, unchanged, plus the server's own verdict. Pass a fresh `nonce` (8 to 32 bytes, hex) so a TPM host quotes over it.
+
+```bash
+NONCE=$(openssl rand -hex 16)
+curl -s "https://api.zode.dev/v1/sandboxes/$ID/attestation?nonce=$NONCE" \
+  -H "Authorization: Bearer $ZODE_TOKEN"
+curl -s "https://api.zode.dev/v1/regions/eu-central/attestation?nonce=$NONCE" \
+  -H "Authorization: Bearer $ZODE_TOKEN"
+```
+
+- `GET /v1/sandboxes/{id}/attestation` returns `{sandbox_id, attestation}` for the sandbox's host (owner, admin and member roles).
+- `GET /v1/regions/{region}/attestation` returns `{region, hosts}` for every active host (any role). A host that does not answer is listed with class `none`.
+
+Each host object has `host`, `region`, `report` (the class, release, the manifest as signed, its Sigstore bundle, the measured files and, on TPM hosts, the quote) and `verdict`.
+
+| Status | Code | When |
+|---|---|---|
+| 400 | `invalid_nonce` | the nonce is not 8 to 32 bytes of hex |
+| 409 | `not_placed` | the sandbox is not on a host yet |
+| 501 | `attestation_unavailable` | the hosts do not report attestation |
+| 502 | `host_unreachable` | the host did not answer |
+
+The console shows the same result as a "Host" line on each sandbox page. See also [`zode verify`](/cli/verify) and [Security](/security).

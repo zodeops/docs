@@ -1,0 +1,99 @@
+---
+title: "Spend and caps"
+description: "How compute and storage accrue, how to cap spend per sandbox and per day, and how to read usage by repo, branch, PR, member, sandbox or model."
+---
+
+Zode bills two things: compute while a sandbox runs, and storage while it exists. AI provider calls are shown but never billed. Prices are on [Pricing](/pricing).
+
+## How billing accrues
+
+- **Compute** accrues per vCPU-hour, only while the sandbox is `running`, prorated to the second with no minimum. A 4 vCPU sandbox running for one hour uses 4 vCPU-hours. Every other status, including `stopped`, costs $0 compute.
+- **Storage** accrues per GB-month from creation until the sandbox is deleted, stopped or not. A month is a fixed 730 hours, and a GB is 10^9 bytes. Today storage is metered on the sandbox's provisioned disk size (50 GB for `small`), not on the bytes used.
+- **AI** calls through the host proxy are priced at the provider's list price and reported. You pay your provider; Zode adds nothing. See [Agents](/concepts/agents).
+
+Money in the API is integer micro-dollars: 1 USD = 1,000,000. Cents appear only on invoices.
+
+Each UTC day closes one hour after midnight. A closed day is stored once and never recomputed, so past numbers do not move.
+
+### Included usage and credit
+
+Pro includes $20 of usage a month (no rollover). Free starts with a $10 credit once a card is saved. Included usage is used first, then credit, and both cover compute and storage, never the plan fee.
+
+Running out of either does not stop anything. Sandboxes keep running, and usage past what is included goes on that month's invoice. You can add credit or turn on auto top-up in Billing: when free credit falls below your threshold, Zode charges your card $5 to $1,000, at most three times a UTC day.
+
+## Cap a sandbox
+
+`max_cost_micros` caps the AI spend of one sandbox. Set it at create or fork; a fork without one keeps its parent's.
+
+<CodeGroup>
+
+```ts TypeScript
+import { Sandbox } from "@zodedev/sdk";
+
+const sb = await Sandbox.create({ maxCostMicros: 2_000_000 }); // $2
+```
+
+```bash curl
+curl -s https://api.zode.dev/v1/sandboxes \
+  -H "Authorization: Bearer $ZODE_TOKEN" -H "Content-Type: application/json" \
+  -d '{"vcpus": 2, "max_cost_micros": 2000000}'
+```
+
+</CodeGroup>
+
+`zode new` has no flag for it; use the workspace default below.
+
+When the sandbox's AI spend reaches the cap, the host refuses its next AI calls with HTTP 402 `zode_spend_cap`, and a `spend.cap_reached` event goes to your [alerts](/concepts/alerts) and [webhooks](/concepts/webhooks-and-telemetry) once. The sandbox keeps running and its compute is not counted against this cap.
+
+## Cap the workspace
+
+Owners and billing members set two caps with `PATCH /v1/billing` (also in the console, Billing). Absent leaves a value unchanged; `null` removes the cap. A cap is between $0.000001 and $100,000.
+
+```bash
+curl -s -X PATCH https://api.zode.dev/v1/billing \
+  -H "Authorization: Bearer $ZODE_TOKEN" -H "Content-Type: application/json" \
+  -d '{"daily_cap_micros": 5000000, "sandbox_default_cap_micros": 1000000}'
+```
+
+- **`sandbox_default_cap_micros`** becomes the `max_cost_micros` of every new sandbox that names none.
+- **`daily_cap_micros`** applies per UTC day, in two places:
+  - Once today's billed spend (compute and storage) reaches it, creating, forking and starting sandboxes answer 409 `daily_cap_reached`: "today's spend $X has reached the workspace's daily cap $Y; raise it in Billing or wait for 00:00 UTC". Running sandboxes are not stopped.
+  - Once today's AI spend through Zode keys reaches it, the host refuses AI calls with HTTP 402 `zode_spend_cap` until 00:00 UTC, and sends `spend.daily_cap_reached`.
+
+`GET /v1/billing` returns the caps with today's spend so far (`caps.today_micros`), this month's usage per meter, the invoice estimate and the credit balance. The same two caps appear in `/v1/proxying` as `caps.daily_cap_micros` and `caps.sandbox_max_cost_micros`; both routes edit the same values.
+
+<Note>
+AI spend for the caps is counted in the host's memory. A host restart starts the count again from zero.
+</Note>
+
+## Read usage
+
+`zode cost` reads the same numbers as the console's Usage page:
+
+```bash
+$ zode cost
+2026-11-05 to 2026-11-11 UTC, as of 2026-11-11 11:04
+
+billed      $0.005875   compute $0.003179   storage $0.002696
+AI          $0.000000 in 0 calls, shown, not billed
+sandboxes   0.182 h, peak 2 at once, 6 forks (p95 17876 ms)
+events      0 OOM kills, 0 breaker trips
+
+REPO     BILLED      AI          HOURS
+(none)   $0.005875   $0.000000   0.182
+```
+
+Group with `--by repo|branch|pr|member|sandbox|model`, pick days with `--days N` or `--from YYYY-MM-DD --to YYYY-MM-DD`, and add `--csv` for one row per day and group. The default range is the last 7 UTC days, today included.
+
+Repo, branch and PR come from what you set on the sandbox (`git_repo`, `git_branch`, `pr_number`; `zode new --repo --branch`). Usage with none of them lands in the `(none)` group, so totals always add up. `model` groups AI spend as `provider/model`; compute and storage sit in the empty group.
+
+The API behind it:
+
+- `GET /v1/usage?from=YYYY-MM-DD&to=YYYY-MM-DD&group_by=branch`: UTC days, inclusive, at most 92 (default the last 30). Returns `totals`, a `series` entry per day, `groups` (most expensive first) and `ai_by_model`.
+- `GET /v1/usage.csv` with the same parameters: columns `day, <group_by>, sandbox_hours, compute_micros, storage_micros, static_ip_micros, billable_micros, ai_micros_not_billed, ai_calls`.
+
+Totals, the daily series, the groups and the CSV rows always sum to the same amounts. Every role can read usage.
+
+<Note>
+AI figures come from the flight recorder, which the hosts do not write to yet, so AI spend currently reads $0.
+</Note>

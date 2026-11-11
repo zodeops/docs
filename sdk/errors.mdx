@@ -1,0 +1,105 @@
+---
+title: "Errors"
+description: "The TypeScript SDK's error classes, the API error codes you will meet, and how to retry when a region is out of capacity."
+---
+
+Every failure the SDK raises is a `ZodeError` or one of its subclasses. API errors keep the API's HTTP status and its stable `code`.
+
+```ts
+import { ZodeError } from "@zodedev/sdk";
+
+try {
+  await sbx.exec("make test");
+} catch (e) {
+  if (e instanceof ZodeError) console.log(e.status, e.code, e.message);
+  // 409 invalid_state sandbox is stopped; start it to run commands
+  else throw e;
+}
+```
+
+A command that exits non-zero is not an error: `exec` returns its result. Only `check: true` and the [file helpers](/sdk/files) turn a failed command into a `CommandError`.
+
+## Classes
+
+| Class | Extends | Fields | Thrown when |
+|---|---|---|---|
+| `ZodeError` | `Error` | `status`, `code`, `message` | The API answered with an error, or a call failed before it got an answer |
+| `CommandError` | `ZodeError` | `exitCode`, `stderr` (plus `code` `command_failed`, `status` 0) | `exec` with `check: true`, or a file helper, saw a non-zero exit |
+| `TimeoutError` | `ZodeError` | `code` `timeout`, `status` 0 | `waitUntilRunning` ran past its `timeoutMs` |
+
+`status` is the HTTP status. It is 0 when the error did not come from an HTTP answer.
+
+## Errors with status 0
+
+These come from the SDK, not from an API answer:
+
+| Code | Meaning |
+|---|---|
+| `no_api_key` | No `apiKey` option and no `ZODE_API_KEY` or `ZODE_TOKEN`. Thrown by `new Zode()` and by static helpers that build a client |
+| `network_error` | The request could not be sent or the connection failed |
+| `timeout` | An HTTP call ran past the client's `timeoutMs` (default 120 s), or `waitUntilRunning` timed out |
+| `command_failed` | A `CommandError` |
+| `attach_failed` | The WebSocket for `spawn` or a streamed `exec` could not open |
+| `attach_closed` | The session closed without an exit status, for example after `kill()` with no signal |
+| `session_error` | The sandbox ended the session with an error |
+| `stdin_closed` | `sendStdin` after `closeStdin` |
+
+A `timeout` or `network_error` on a create does not tell you whether the sandbox was made. List sandboxes before you try again.
+
+## API error codes
+
+The API answers errors as `{"error": {"code": "...", "message": "..."}}`. The message is for people and may change; branch on `code`. If the body has no code, the SDK uses `http_error`.
+
+| Status | Code | When |
+|---|---|---|
+| 400 | `bad_request` | The body is not valid JSON for the route |
+| 400 | `invalid_request` | A field failed validation, such as a size the host does not offer; the message says which |
+| 400 | `unknown_environment` | `Sandbox.create({ environment })` named no environment in the workspace |
+| 401 | `unauthorized` | The API key is missing, wrong, expired or revoked |
+| 403 | `forbidden` | Your role in the workspace does not allow this |
+| 403 | `token_scope` | The key's scope (`read_only` or `sandboxes`) does not cover this call |
+| 403 | `plan_required` | The plan does not include the feature, such as the desktop on Free |
+| 404 | `not_found` | No such sandbox, snapshot, environment, variable or secret in this workspace |
+| 409 | `invalid_state` | The sandbox is in the wrong state, such as running a command in a stopped sandbox |
+| 409 | `concurrency_limit` | The plan's running-sandbox limit is reached: "Your free plan runs at most 2 sandboxes at once. Stop one first." |
+| 409 | `daily_cap_reached` | The workspace's daily spend cap is reached; raise it in Billing or wait for 00:00 UTC |
+| 409 | `node_full` | The sandbox's host has no free memory for a start or fork |
+| 409 | `browser_off`, `desktop_off` | The browser or desktop is switched off |
+| 409 | `limit_reached` | A count limit, such as 20 snapshots per sandbox |
+| 409 | `name_taken` | The name is already used |
+| 429 | `rate_limited` | Too many sandboxes created recently; the message says when to try again |
+| 429 | `too_many_viewers` | Too many live views of one desktop |
+| 501 | `feature_unavailable` | The sandbox's host cannot run the browser or desktop yet |
+| 501 | `snapshots_unavailable` | The sandbox's host cannot take or restore snapshots yet |
+| 502 | `node_error` | The sandbox's host did not do what was asked |
+| 503 | `no_capacity` | No host in the region has room for that size right now |
+| 500 | `internal` | Something failed on Zode's side |
+
+`waitUntilRunning` also throws `invalid_state` with status 409 when the sandbox it polls is stopped, failed or deleted. That one is raised by the SDK.
+
+## Retry on capacity errors
+
+`no_capacity`, `node_full` and `rate_limited` clear on their own. Retry them with a growing delay. Do not retry `concurrency_limit` or `daily_cap_reached` in a loop: they clear only when you stop a sandbox or the cap changes.
+
+```ts
+import { Sandbox, ZodeError } from "@zodedev/sdk";
+
+const RETRYABLE = new Set(["no_capacity", "node_full", "rate_limited"]);
+
+async function withRetry<T>(fn: () => Promise<T>, attempts = 5): Promise<T> {
+  for (let i = 1; ; i++) {
+    try {
+      return await fn();
+    } catch (e) {
+      if (!(e instanceof ZodeError) || !RETRYABLE.has(e.code) || i >= attempts) throw e;
+      const delay = Math.min(30_000, 1000 * 2 ** (i - 1)) * (0.5 + Math.random());
+      await new Promise((r) => setTimeout(r, delay));
+    }
+  }
+}
+
+const sbx = await withRetry(() => Sandbox.create({ vcpus: 8 }));
+const child = await withRetry(() => sbx.fork());
+```
+
+The SDK does not expose response headers, so it cannot read `Retry-After` from a `rate_limited` answer. The wait is in the error message.

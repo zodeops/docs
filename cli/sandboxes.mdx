@@ -1,0 +1,128 @@
+---
+title: "Sandboxes"
+description: "List, make, enter, run commands in, fork, stop, start and delete sandboxes from the zode CLI."
+---
+
+## List
+
+```bash
+zode ls
+```
+
+```text
+NAME        STATUS    SIZE      REGION       CREATED   ID
+demo        running   small     eu-central   2h ago    sbx_q3vfn7tkx2mhcw4a
+demo-fork   stopped   default   eu-central   3d ago    sbx_r7k2wbn6tdyx3lpe
+```
+
+With no sandboxes it prints `No sandboxes yet. Make one with: zode new`.
+
+## Make
+
+```bash
+zode new [name] [flags]
+```
+
+Leave out the name and the API picks one. Names use lowercase letters, digits and hyphens, up to 63 characters.
+
+| Flag | Effect |
+|---|---|
+| `--size S` | `small`, `default`, `large` or `xlarge`. Without it you get **small**. |
+| `--image IMG` | Start from a [custom image](/cli/images), by name or `img_` id. The image sets the size, so you cannot combine it with `--size`. |
+| `--browser` | Run Chrome in the sandbox from the start. See [Browser and desktop](/cli/browser-desktop). |
+| `--desktop` | Run a Linux desktop from the start. Not on the Free plan. |
+| `--repo URL` | Label the sandbox with a git repo. `zode cost --by repo` groups by it. |
+| `--branch NAME` | Label the sandbox with a git branch. `zode cost --by branch` groups by it. |
+
+`--repo` and `--branch` are labels; they do not clone anything. Leave out `--browser` or `--desktop` and the workspace default applies; `--browser=false` turns it off explicitly.
+
+| Size | vCPU | RAM | Disk |
+|---|---|---|---|
+| small | 2 | 4 GB | 50 GB |
+| default | 4 | 8 GB | 50 GB |
+| large | 8 | 16 GB | 110 GB |
+| xlarge | 16 | 32 GB | 250 GB |
+
+```bash
+zode new demo --size large --browser
+```
+
+```text
+demo is running (large, 8 vCPU, 16 GB, eu-central) in 1.6s
+  zode ssh demo
+  zode browser demo
+```
+
+On the Free plan you can run 2 sandboxes at once. A third `zode new` fails with `Your free plan runs at most 2 sandboxes at once. Stop one first.`
+
+## Open a shell
+
+```bash
+zode ssh <sandbox> [-- cmd ...]
+```
+
+Without a command you get a root login shell (`bash -l`) in `/workspace`. When your stdin and stdout are a terminal, the session gets a TTY and follows your window size. With `-- cmd`, it runs that command instead. `zode ssh` takes the same `-e` and `--env-file` flags as `zode exec`, placed before the sandbox name.
+
+## Run a command
+
+```bash
+zode exec [-t] [-e KEY=VALUE] [-e KEY] [--env-file FILE] <sandbox> -- cmd [args...]
+```
+
+`zode exec` streams stdout and stderr as the command runs, then exits with the command's exit code. Put the flags before the sandbox name.
+
+| Flag | Effect |
+|---|---|
+| `-t`, `--tty` | Allocate a terminal (when your stdin is one). stdout and stderr merge. |
+| `-e KEY=VALUE`, `--env KEY=VALUE` | Set a variable for this command. Repeat for more. |
+| `-e KEY` | Pass the value of `KEY` from your own environment. Fails if it is not set. |
+| `--env-file FILE` | Load `KEY=VALUE` lines. Blank lines, `#` comments and lines without `=` are skipped; a leading `export ` and quotes around values are stripped. |
+
+The variables go on top of the sandbox's [environment](/concepts/environments-and-secrets) and travel in a header, not the URL.
+
+The command runs as given, without a shell. For pipes, `&&` or globs, run a shell yourself:
+
+```bash
+zode exec demo -- bash -lc 'npm ci && npm test'
+zode exec -e NODE_ENV=test --env-file .env demo -- npm test
+cat data.json | zode exec demo -- python3 -m json.tool
+```
+
+stdin: piped input is streamed to the command. If your stdin is a terminal and you did not pass `-t`, the command gets end-of-file at once, so commands that read stdin do not hang. Without a TTY, Ctrl-C sends `INT` to the remote command instead of dropping the connection.
+
+If the kernel kills the command for running out of memory, `zode` prints `zode: killed: out of memory (peak N MB)`. A sandbox that is not running gives `zode: demo is stopped; zode start demo`.
+
+## Fork
+
+```bash
+zode fork <sandbox> [name] [--browser[=false]] [--desktop[=false]]
+```
+
+The copy has the parent's memory, running processes and disk, and keeps its size, region and repo. Browser and desktop follow the parent unless you pass the flags. Flags can go anywhere on the line.
+
+```bash
+zode fork demo demo-try-2 --browser=false
+```
+
+```text
+demo-try-2 is a copy of demo, running in 2.4s
+  zode ssh demo-try-2
+```
+
+A fork counts toward your plan's running-sandbox limit.
+
+## Stop, start, delete
+
+```bash
+zode stop <sandbox>    # hibernate: disk and memory kept, compute billing stops
+zode start <sandbox>   # wake it where it left off
+zode rm <sandbox>      # delete it and its disk
+```
+
+```text
+demo is stopped
+demo is running
+demo deleted
+```
+
+A stopped sandbox still pays for storage. `zode rm` cannot be undone. See [Sandboxes](/concepts/sandboxes) for the full lifecycle.

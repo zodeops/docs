@@ -1,0 +1,134 @@
+---
+title: "TypeScript SDK"
+sidebarTitle: "Overview"
+description: "Install @zodedev/sdk, set an API key, and create, run and delete a sandbox from Node."
+---
+
+`@zodedev/sdk` wraps the Zode API for Node. Version 0.1.1 is on npm. It is ESM only, needs Node 22 or later, and has no runtime dependencies.
+
+Python SDK: coming soon.
+
+## Install
+
+```bash
+npm i @zodedev/sdk
+```
+
+The package ships as ES modules only. Load it with `import`, not `require`.
+
+## Get an API key
+
+Create a key in the [console](https://console.zode.dev) under **Settings**, **API keys**, or with `POST /v1/tokens` (see the [API reference](/api-reference/overview)). A key starts with `zode_tok_` and belongs to one workspace.
+
+```bash
+export ZODE_API_KEY=zode_tok_...
+```
+
+The SDK does not read the sign-in that `zode login` saves for the CLI. It does read `ZODE_TOKEN`, so a shell set up for the CLI with that variable works for the SDK too.
+
+## Configure the client
+
+`new Zode(options)` makes a client. Every option is optional.
+
+| Option | Environment variables, in order | Default |
+|---|---|---|
+| `apiKey` | `ZODE_API_KEY`, then `ZODE_TOKEN` | none: the constructor throws `ZodeError` with code `no_api_key` |
+| `baseUrl` | `ZODE_API_URL`, then `ZODE_API` | `https://api.zode.dev` |
+| `org` | none | the key's own workspace |
+| `timeoutMs` | none | `120000` |
+| `fetch` | none | the global `fetch` |
+
+- `org` is a workspace id, sent as the `X-Zode-Org` header. You do not need it with an API key.
+- `timeoutMs` applies to each HTTP call. It is long by default because a create waits for the VM to boot. It does not limit streamed commands; those take their own `timeoutMs` (see [Run commands](/sdk/exec)).
+- `fetch` lets you swap in another implementation, for a proxy or tests.
+- An environment variable set to an empty string counts as unset.
+
+```ts
+import { Zode } from "@zodedev/sdk";
+
+const zode = new Zode({ apiKey: process.env.ZODE_API_KEY, timeoutMs: 60_000 });
+```
+
+## Static helpers or a client
+
+There are two ways to reach sandboxes:
+
+- **Static helpers** on `Sandbox`: `Sandbox.create(opts)`, `Sandbox.get(id)` and `Sandbox.list(filters)`. Each call builds a client from the environment unless you pass `client`, which takes a `Zode` instance or `ZodeOptions`.
+- **A client**: `zode.sandboxes.create / get / list` do the same thing. Snapshots (`zode.snapshots`) and environments (`zode.environments`) are only on the client.
+
+```ts
+import { Sandbox, Zode } from "@zodedev/sdk";
+
+const all = await Sandbox.list();
+
+const zode = new Zode();
+const same = await zode.sandboxes.list();
+const stopped = await Sandbox.list({ status: "stopped", client: zode });
+```
+
+Every `Sandbox` keeps the client that loaded it as `sbx.client`.
+
+For routes the SDK does not wrap, `zode.request(method, path, body?, query?)` sends a JSON request to any `/v1` path and throws `ZodeError` on a non-2xx answer.
+
+```ts
+const usage = await zode.request("GET", "/v1/usage");
+```
+
+## Records use the API's field names
+
+`sbx.id`, `sbx.name` and `sbx.status` are shortcuts. `sbx.record` returns a copy of the full API record, in the API's snake_case:
+
+```json
+{
+  "id": "sbx_5a4hldojl5lpjwlk",
+  "name": "docs-qs",
+  "status": "stopped",
+  "vcpus": 2,
+  "ram_mb": 4096,
+  "disk_gb": 50,
+  "region": "eu-central",
+  "git_repo": "",
+  "git_branch": "",
+  "pr_number": null,
+  "max_cost_micros": null,
+  "parent_sandbox_id": null,
+  "created_at": "2026-11-11T10:45:55.068626Z",
+  "updated_at": "2026-11-11T11:02:20.316775Z",
+  "deleted_at": null,
+  "created_by": { "member_id": "mem_r6phynmelgcdvjgw", "email": "you@example.com" },
+  "browser": true,
+  "desktop": false
+}
+```
+
+The record updates after every call that returns a sandbox: `refresh`, `stop`, `start`, `restore`, and switching the browser or desktop. Options you pass in are camelCase (`gitRepo`, `maxCostMicros`); results such as `exec`'s `exit_code` keep the API's names.
+
+## End-to-end example
+
+```ts
+import { Sandbox } from "@zodedev/sdk";
+
+const sbx = await Sandbox.create({ name: "sdk-demo", vcpus: 2 });
+try {
+  const r = await sbx.exec("uname -sr && nproc");
+  console.log(r.exit_code, r.stdout);
+
+  await sbx.files.write("/workspace/hello.txt", "hello\n");
+  console.log(await sbx.files.readText("/workspace/hello.txt"));
+
+  const child = await sbx.fork({ name: "sdk-demo-2" });
+  console.log((await child.exec("cat /workspace/hello.txt")).stdout);
+  await child.delete();
+} finally {
+  await sbx.delete();
+}
+```
+
+`Sandbox.create` resolves once the VM is running. The fork is a second running sandbox, so this example needs room for two; the Free plan runs at most 2 at once.
+
+## Reference
+
+- [Sandboxes](/sdk/sandboxes): create, list, stop, start, fork, delete
+- [Run commands](/sdk/exec): `exec`, `spawn` and streaming
+- [Files](/sdk/files), [Snapshots](/sdk/snapshots), [Browser and desktop](/sdk/browser-desktop), [Environments](/sdk/environments)
+- [Errors](/sdk/errors): `ZodeError` codes and retries

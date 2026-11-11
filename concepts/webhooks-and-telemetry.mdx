@@ -1,0 +1,139 @@
+---
+title: "Webhooks and telemetry"
+description: "Receive signed webhooks for workspace events, export sandbox metrics, traces and logs over OpenTelemetry, and read each sandbox's flight recorder."
+---
+
+Webhooks and OpenTelemetry export are workspace settings for owners and admins (console: Configure, Webhooks & OTel). Every change is in the audit log; secrets never are.
+
+## Webhooks
+
+A webhook endpoint is an HTTPS URL on a public host plus the event types it wants. A workspace has at most 10 endpoints.
+
+```bash
+curl -s https://api.zode.dev/v1/webhooks \
+  -H "Authorization: Bearer $ZODE_TOKEN" -H "Content-Type: application/json" \
+  -d '{"url": "https://hooks.example.com/zode", "event_types": ["sandbox.create", "sandbox.delete", "spend.cap_reached"]}'
+```
+
+The 201 response includes `"secret": "whsec_..."`. It is shown once. `POST /v1/webhooks/{id}/rotate-secret` returns a new one, and the old one stops working at once.
+
+### Event types
+
+| Group | Types |
+|---|---|
+| Sandbox | `sandbox.create`, `sandbox.fork`, `sandbox.start`, `sandbox.stop`, `sandbox.delete`, `sandbox.oom`, `sandbox.failed` |
+| Members and invites | `member.update`, `member.remove`, `member.leave`, `invite.create`, `invite.resend`, `invite.revoke`, `invite.accept` |
+| Workspace | `org.update`, `org.transfer` |
+| Spend | `breaker.tripped`, `spend.cap_reached`, `spend.daily_cap_reached` |
+
+`balance.low`, `invoice.created`, `invoice.paid` and `invoice.payment_failed` can be selected but are not sent yet. `GET /v1/webhooks` lists every type with `available`.
+
+### What a delivery looks like
+
+`POST` to your URL with `Content-Type: application/json` and these headers:
+
+- `Zode-Event`: the event type
+- `Zode-Delivery`: `whd_...`, unique per delivery
+- `Zode-Signature`: `t=<unix seconds>,v1=<hex HMAC-SHA256>`
+
+```json
+{
+  "id": "evt_...",
+  "type": "sandbox.create",
+  "created_at": "2026-11-11T10:00:00Z",
+  "workspace_id": "org_...",
+  "actor": "ada@acme.dev",
+  "target": { "type": "sandbox", "id": "sbx_..." },
+  "data": {}
+}
+```
+
+`id` stays the same across retries and resends, so deduplicate on it.
+
+### Verify the signature
+
+`v1` is the hex HMAC-SHA256 of `<t>.<raw body>`, keyed with the whole `whsec_...` string. Check it against the raw request bytes before parsing, and reject a `t` more than 5 minutes from now.
+
+<CodeGroup>
+
+```ts Node.js
+import { createHmac, timingSafeEqual } from "node:crypto";
+
+export function verifyZodeSignature(secret: string, header: string, rawBody: Buffer, toleranceSec = 300): boolean {
+  let ts = "";
+  const sigs: string[] = [];
+  for (const part of header.split(",")) {
+    const [k, v] = part.trim().split("=");
+    if (k === "t") ts = v;
+    if (k === "v1") sigs.push(v);
+  }
+  if (!ts || Math.abs(Date.now() / 1000 - Number(ts)) > toleranceSec) return false;
+  const want = createHmac("sha256", secret).update(`${ts}.`).update(rawBody).digest("hex");
+  return sigs.some((s) => s.length === want.length && timingSafeEqual(Buffer.from(s), Buffer.from(want)));
+}
+```
+
+```python Python
+import hashlib, hmac, time
+
+def verify_zode_signature(secret: str, header: str, body: bytes, tolerance: int = 300) -> bool:
+    fields = [p.strip().split("=", 1) for p in header.split(",") if "=" in p]
+    ts = next((v for k, v in fields if k == "t"), "")
+    sigs = [v for k, v in fields if k == "v1"]
+    if not ts.isdigit() or abs(time.time() - int(ts)) > tolerance:
+        return False
+    want = hmac.new(secret.encode(), ts.encode() + b"." + body, hashlib.sha256).hexdigest()
+    return any(hmac.compare_digest(s, want) for s in sigs)
+```
+
+</CodeGroup>
+
+### Retries, deliveries and tests
+
+- Any 2xx is success. Anything else, a timeout (10 s) or a redirect (not followed) is a failure.
+- Failures retry with backoff: 30 s, doubling, capped at 1 hour, with jitter, until 24 hours after the event. Then the delivery is `failed`.
+- An endpoint whose deliveries have all failed for 3 days is turned off (`disabled_reason: "failing"`). `PATCH /v1/webhooks/{id}` with `{"enabled": true}` turns it back on.
+- `GET /v1/webhooks/{id}/deliveries` lists deliveries newest first, with status (`pending`, `delivering`, `succeeded`, `failed`), attempts, your response status and the first 2,048 bytes of your response body. Page with `limit` (1 to 100) and `before`.
+- `POST /v1/webhooks/{id}/deliveries/{delivery_id}/resend` queues the same event and body again with a new delivery id (409 `endpoint_disabled` on a disabled endpoint).
+- `POST /v1/webhooks/{id}/test` sends one `webhook.test` event now, without retries, and returns the delivery.
+
+## OpenTelemetry export
+
+Zode can push each sandbox's flight recorder data to your OTLP/HTTP collector once a minute. One configuration per workspace.
+
+```bash
+curl -s -X PATCH https://api.zode.dev/v1/otel \
+  -H "Authorization: Bearer $ZODE_TOKEN" -H "Content-Type: application/json" \
+  -d '{"endpoint": "https://otlp.example.com", "protocol": "http/protobuf", "headers": {"Authorization": "Bearer ..."}, "enabled": true}'
+curl -s -X POST https://api.zode.dev/v1/otel/test -H "Authorization: Bearer $ZODE_TOKEN"
+```
+
+- Data goes to `<endpoint>/v1/metrics`, `/v1/traces` and `/v1/logs`. Protocols: `http/protobuf` (default) and `http/json`. gRPC is not offered.
+- Up to 20 headers. Their values are stored sealed and never returned; `GET /v1/otel` shows `header_names` only.
+- Resource attributes: `service.name=zode-sandbox`, `zode.org`, `zode.sandbox`, `zode.sandbox.name`, `zode.region`, `zode.branch`, `zode.repo`.
+- Metrics: `zode.sandbox.cpu.utilization`, `zode.sandbox.memory.usage`, `zode.sandbox.memory.pressure`, `zode.sandbox.disk.read.iops`, `zode.sandbox.disk.write.iops`, `zode.sandbox.network.receive` and `.transmit`.
+- Traces: one span per process and one per AI call (`gen_ai.*` attributes and cost). Logs: one record per network event, `WARN` when blocked.
+- Delivery is at least once. Span ids derive from recorder event ids, so your backend can deduplicate. Export starts when you enable it; there is no backfill.
+- `POST /v1/otel/test` sends one log record ("Zode connection test"). `DELETE /v1/otel` removes the configuration.
+
+## Flight recorder
+
+Every sandbox has a flight recorder with four tracks: resource metrics each second, processes, AI calls and network events. Read it per sandbox:
+
+```bash
+curl -s "https://api.zode.dev/v1/sandboxes/$ID/timeline?tracks=process,ai,net&limit=100" \
+  -H "Authorization: Bearer $ZODE_TOKEN"
+curl -s "https://api.zode.dev/v1/sandboxes/$ID/stats?from=2026-11-11T00:00:00Z" \
+  -H "Authorization: Bearer $ZODE_TOKEN"
+```
+
+- `from` and `to` take unix milliseconds or RFC 3339. The default window is the last hour; one read covers at most 31 days.
+- `timeline` returns `entries` in time order and a `next` value; pass it back as `cursor` for the next page. `limit` is 1 to 5,000 (default 500). `tracks` is any of `metrics`, `process`, `ai`, `net`.
+- Process rows have `source: "guest"`: the VM reports them, so treat them as untrusted. The other tracks come from the host.
+- `stats` summarises the window: samples, average and peak CPU, peak RAM and memory pressure, network bytes, processes, OOM kills, blocked network events, AI calls and AI cost.
+
+Retention is set by your plan when a row is written: Free 7 days, Pro 30, Team 90, Enterprise 90. A deleted sandbox stays readable for up to 14 days, within that limit.
+
+<Note>
+The hosts do not write to the flight recorder yet. Today `timeline` returns no entries, `stats` returns zeros, and OpenTelemetry export has nothing to send.
+</Note>

@@ -1,0 +1,103 @@
+---
+title: "CI"
+description: "Run GitHub Actions jobs on fresh Zode sandboxes with runs-on: zode, with a monthly spend cap and per-job cost."
+---
+
+CI on Zode runs a GitHub Actions job in a fresh sandbox, one sandbox per job, deleted when the job ends. You pay for the runner's compute from creation to deletion.
+
+<Warning>
+CI is not switched on in production yet. `GET /v1/ci` answers `"configured": false`, and the console's CI page says CI isn't set up. The rest of this page describes how it works once it is.
+</Warning>
+
+## Set it up
+
+1. An owner or admin opens the console, Configure, CI, and clicks **Install on GitHub**. Installation happens in the console only; there is no CLI or API-key flow for it.
+2. On GitHub, pick the account and repositories. GitHub sends you back to the console, which links the installation to your workspace. One installation belongs to one workspace.
+3. In a workflow, set `runs-on` to a Zode label:
+
+```yaml
+jobs:
+  test:
+    runs-on: zode-4x8
+    steps:
+      - uses: actions/checkout@v4
+      - run: npm ci && npm test
+```
+
+The Zode GitHub App asks for three repository permissions: Administration (read and write, used only to register and remove just-in-time runners), Actions (read) and Metadata (read).
+
+## Runner sizes
+
+| Label | vCPU | RAM | Disk |
+|---|---|---|---|
+| `zode` or `zode-2x4` | 2 | 4 GB | 50 GB |
+| `zode-4x8` | 4 | 8 GB | 50 GB |
+| `zode-8x16` | 8 | 16 GB | 110 GB |
+| `zode-16x32` | 16 | 32 GB | 250 GB |
+
+`self-hosted`, `linux` and `x64` may appear next to a Zode label. Any other label, an unknown size, or two different Zode sizes in one `runs-on` gets the job refused with a reason. Jobs without a Zode label are ignored: not recorded, not billed.
+
+## How a job runs
+
+1. GitHub reports the job queued. Zode records it and checks the monthly cap.
+2. Zode registers a just-in-time runner on the repository, creates a sandbox of that size (audited as `sandbox.create` by `ci:github`) and starts the runner in it.
+3. The job runs. When GitHub reports it completed, Zode records the conclusion and deletes the sandbox.
+
+Every runner boots a clean image. There is no per-repository cache yet, so `cache_hit` is always `false`. A runner that lives longer than 6 hours is deleted.
+
+## Monthly cap
+
+Owners and admins set a cap on CI spend per UTC calendar month. `null` removes it.
+
+```bash
+curl -s -X PATCH https://api.zode.dev/v1/ci/settings \
+  -H "Authorization: Bearer $ZODE_TOKEN" -H "Content-Type: application/json" \
+  -d '{"monthly_cap_micros": 25000000}'
+```
+
+Past the cap, new jobs are refused with the reason "monthly CI cap reached: $X of $Y spent". Running jobs finish. Each refusal is audited as `ci.job_refused`.
+
+CI sandboxes are ordinary sandboxes, so the workspace [daily cap](/concepts/spend-and-caps) also applies to them.
+
+## See jobs and spend
+
+`GET /v1/ci` (every role) returns whether CI is configured, the runner sizes, your GitHub installations with their repositories, the monthly cap and this month's spend:
+
+```json
+{
+  "configured": false,
+  "app_slug": null,
+  "sizes": [{ "label": "zode-2x4", "vcpus": 2, "ram_mb": 4096, "disk_gb": 50, "default": true }],
+  "installations": [],
+  "monthly_cap_micros": null,
+  "spent_micros": 0,
+  "month_start": "2026-11-01T00:00:00Z"
+}
+```
+
+`GET /v1/ci/jobs?limit=50` (1 to 200) lists jobs newest first:
+
+```json
+{
+  "jobs": [{
+    "id": "cij_...", "repo": "acme-inc/api", "branch": "main", "workflow": "CI", "job": "test",
+    "labels": ["zode-4x8"], "size": "4x8", "status": "completed", "conclusion": "success",
+    "reason": null, "sandbox_id": "sbx_...", "cache_hit": false,
+    "cost_micros": 5833, "cost_final": true, "duration_ms": 252000
+  }]
+}
+```
+
+| Status | Meaning |
+|---|---|
+| `queued` | GitHub queued it |
+| `provisioning` | Zode is starting the runner |
+| `waiting` | the runner is up; GitHub has not started the job |
+| `running` | the job is running |
+| `completed` | done; `conclusion` is GitHub's (`success`, `failure`, `cancelled`, ...) |
+| `refused` | never started; `reason` says why (cap reached, unknown size, a label Zode runners lack, app suspended) |
+| `failed` | Zode could not run it; `reason` says why |
+
+`cost_final: false` means the runner is still live and `cost_micros` is the cost so far. Job cost counts compute only; the runner's short-lived disk is not charged.
+
+If you uninstall the app on GitHub, Zode unlinks it and frees any live runner sandboxes. While the app is suspended on GitHub, new jobs are refused.
