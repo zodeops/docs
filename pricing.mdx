@@ -16,13 +16,15 @@ Compute costs **$0.00875 per vCPU-hour**, billed per second while a sandbox is r
 | large | 8 | 16 GB | 110 GB | $0.070 | $0.56 |
 | xlarge | 16 | 32 GB | 250 GB | $0.140 | $1.12 |
 
-A stopped sandbox costs nothing for compute. `zode new` without `--size`, and the API and SDK without `vcpus`, make a **small** sandbox.
+A stopped sandbox costs nothing for compute. `zode new` without `--size`, the API and SDK without `vcpus`, and the MCP `sandbox_create` tool without `size` all make a **small** sandbox. The size named `default` (4 vCPU) is not the default; you only get it by asking for it.
 
 ## Storage
 
-Storage costs **$0.10 per GB-month** of the sandbox's disk size. A GB is 10⁹ bytes and a month is 730 hours; storage is prorated per second. Storage is billed from create until delete, running or stopped.
+Storage is free for the first 48 hours of every sandbox, forks included. After that it costs **$0.10 per GB-month** of the sandbox's disk size, running or stopped, until you delete it. A GB is 10⁹ bytes and a month is 730 hours; storage is prorated per second.
 
-| Size | Disk | Storage per month |
+A sandbox you delete within 48 hours of creating it pays no storage at all.
+
+| Size | Disk | Storage per month, after the first 48 hours |
 |---|---|---|
 | small | 50 GB | $5.00 |
 | default | 50 GB | $5.00 |
@@ -30,7 +32,7 @@ Storage costs **$0.10 per GB-month** of the sandbox's disk size. A GB is 10⁹ b
 | xlarge | 250 GB | $25.00 |
 
 <Warning>
-Stopping a sandbox ends its compute charge, not its storage charge. Delete sandboxes you no longer need.
+Stopping a sandbox ends its compute charge, not its storage charge. Once a sandbox is 48 hours old, it pays for storage until you delete it. Delete sandboxes you no longer need.
 </Warning>
 
 ## AI usage
@@ -51,18 +53,29 @@ AI calls from a sandbox go out on your own provider keys. They are not on your i
 | Audit log CSV export | No | No | Yes | Yes |
 
 - **Included usage** covers compute and storage. On Pro, the $20 resets each month; unused usage does not carry over. Usage past it is billed at the rates above.
-- **Free credit** is granted once per workspace when you first save a card.
+- **Free credit** is granted once per workspace when you first save a card. A new workspace starts with $0 of credit.
 - **Running at once** counts sandboxes that are creating, running or starting. Over the limit, a create, fork or start fails: "Your free plan runs at most 2 sandboxes at once. Stop one first."
-- **Desktop on Free** fails with `plan_required` (403): "the free plan does not include the desktop; upgrade in Billing".
+- **Desktop on Free** fails with `plan_required` (402): "the free plan does not include the desktop; upgrade in Billing".
 
-A workspace on Free can start a 7-day Pro trial in **Billing** once, with no card. During the trial the desktop is available; Pro's fee and included usage do not apply, and nothing is charged when it ends.
+A workspace on Free can start a 7-day Pro trial in **Billing** once. During the trial the workspace gets Pro's limits: 15 sandboxes running at once, 20 custom images kept and 2 building at once, and the desktop. Pro's fee and included usage do not apply, and nothing is charged when it ends. The trial itself needs no card, but running sandboxes does (see below), so add a card or credit to use it.
+
+## A card is required to run sandboxes
+
+To run sandboxes, a workspace needs a payment method on file or credit left. A workspace with no card whose remaining credit is $0 or less:
+
+- cannot create, fork or start sandboxes. Those calls fail with HTTP 402 `credit_exhausted`: add a card or buy credit in **Billing**.
+- has its running sandboxes stopped within about 15 minutes. They are hibernated like any [stop](/concepts/sandboxes#stop-or-delete), never deleted, and a [`balance.low`](/concepts/webhooks-and-telemetry#event-types) event lists them.
+
+Saving a card or buying credit lifts the block at once. Stopped sandboxes stay stopped until you start them.
+
+New workspaces start with $0 of credit, so save a card in **Billing** before your first sandbox. Saving the first card also grants the $10 signup credit. Workspaces with a card keep running when credit runs out, and usage past the included amount is invoiced monthly. Enterprise workspaces are billed by contract and are never stopped for credit.
 
 ## What is billed per second
 
 | Item | Billed while | Rate |
 |---|---|---|
 | Compute | The sandbox is running | $0.00875 per vCPU-hour |
-| Storage | The sandbox exists, running or stopped | $0.10 per GB-month of disk size |
+| Storage | The sandbox exists, running or stopped, from 48 hours after create | $0.10 per GB-month of disk size |
 | AI provider spend | Never | Shown, not billed |
 
 Creating, stopping, starting, forking and snapshotting have no fee of their own. A fork is a running sandbox and bills compute like any other.
@@ -71,7 +84,7 @@ Creating, stopping, starting, forking and snapshotting have no fee of their own.
 
 You can bound spend before it happens:
 
-- **Per sandbox**: `max_cost_micros` on create or fork (`maxCostMicros` in the SDK), in micro-dollars, where $1 is 1,000,000. It caps the sandbox's AI calls through Zode, not its compute or storage. A workspace can set a default for new sandboxes.
+- **Per sandbox**: `max_cost_micros` on create or fork (`maxCostMicros` in the SDK), in micro-dollars, where $1 is 1,000,000. It counts only the sandbox's AI calls through Zode, not its compute or storage. The host keeps the running total in memory, so a host restart starts it again from zero. A workspace can set a default for new sandboxes.
 - **Per workspace per day**: a daily cap in **Billing**. Once today's spend reaches it, creates, forks and starts fail with `daily_cap_reached` until 00:00 UTC or until you raise it.
 
 See [Spend and caps](/concepts/spend-and-caps) for what happens when a cap is reached.
