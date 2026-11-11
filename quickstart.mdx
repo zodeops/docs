@@ -23,7 +23,6 @@ You need a Zode account and a Linux or macOS machine (amd64 or arm64).
     `zode login` opens your browser and prints a code. Confirm the code in the browser, and the CLI saves a token for that workspace. `zode whoami` shows who and where you are signed in.
   </Step>
   <Step title="Make a sandbox">
-    {/* untested */}
     ```bash
     zode new demo
     ```
@@ -31,7 +30,6 @@ You need a Zode account and a Linux or macOS machine (amd64 or arm64).
     Without `--size` you get a `small` sandbox: 2 vCPU, 4 GB RAM, 50 GB disk. The command returns once the sandbox is running and prints its size, region and how long the create took.
   </Step>
   <Step title="Run a command">
-    {/* untested */}
     ```bash
     zode exec demo -- uname -a
     ```
@@ -39,7 +37,6 @@ You need a Zode account and a Linux or macOS machine (amd64 or arm64).
     `zode exec` streams the output and exits with the command's exit code.
   </Step>
   <Step title="Open a shell">
-    {/* untested */}
     ```bash
     zode ssh demo
     ```
@@ -47,7 +44,6 @@ You need a Zode account and a Linux or macOS machine (amd64 or arm64).
     You get a login shell in the sandbox. Type `exit` to leave; the sandbox keeps running.
   </Step>
   <Step title="Fork it">
-    {/* untested */}
     ```bash
     zode fork demo demo-2
     ```
@@ -55,7 +51,6 @@ You need a Zode account and a Linux or macOS machine (amd64 or arm64).
     `demo-2` is a new running sandbox with a copy of `demo`'s memory and disk. Processes running in `demo` are running in `demo-2` too.
   </Step>
   <Step title="Stop one, delete the other">
-    {/* untested */}
     ```bash
     zode stop demo
     zode rm demo-2
@@ -85,7 +80,6 @@ npm i @zodedev/sdk
 
 These examples do the same steps as the CLI. If `demo` from the CLI steps still exists, run `zode rm demo` first or pick another name: names do not have to be unique, but the CLI then asks you for the id.
 
-{/* untested */}
 <CodeGroup>
 
 ```ts TypeScript

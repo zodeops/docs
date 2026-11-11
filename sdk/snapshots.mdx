@@ -5,7 +5,6 @@ description: "Save a sandbox's disk and memory, list snapshots, roll back to one
 
 A snapshot saves a sandbox's disk and memory. Restoring it puts the same sandbox back to that moment, running processes included. For a separate copy that runs next to the original, use [fork](#snapshot-or-fork) instead.
 
-{/* untested */}
 ```ts
 const snap = await sbx.snapshot("before-migration");
 await sbx.exec("npm run db:migrate", { timeoutMs: 120_000 });
@@ -43,7 +42,6 @@ await sbx.restore(snap); // back to before the migration
 | `restore(snapshotId)` | `Promise<{ snapshot: Snapshot; sandbox: SandboxInfo }>` |
 | `delete(snapshotId)` | `Promise<void>` |
 
-{/* untested */}
 ```ts
 import { Zode } from "@zodedev/sdk";
 

@@ -43,7 +43,6 @@ Leave out the name and the API picks one. Names use lowercase letters, digits an
 | large | 8 | 16 GB | 110 GB |
 | xlarge | 16 | 32 GB | 250 GB |
 
-{/* untested */}
 ```bash
 zode new demo --size large --browser
 ```
@@ -83,7 +82,6 @@ The variables go on top of the sandbox's [environment](/concepts/environments-an
 
 The command runs as given, without a shell. For pipes, `&&` or globs, run a shell yourself:
 
-{/* untested */}
 ```bash
 zode exec demo -- bash -lc 'npm ci && npm test'
 zode exec -e NODE_ENV=test --env-file .env demo -- npm test
@@ -102,7 +100,6 @@ zode fork <sandbox> [name] [--browser[=false]] [--desktop[=false]]
 
 The copy has the parent's memory, running processes and disk, and keeps its size, region and repo. Browser and desktop follow the parent unless you pass the flags. Flags can go anywhere on the line.
 
-{/* untested */}
 ```bash
 zode fork demo demo-try-2 --browser=false
 ```
@@ -122,7 +119,6 @@ zode start <sandbox>   # wake it where it left off
 zode rm <sandbox>      # delete it and its disk
 ```
 
-{/* untested */}
 ```text
 demo is stopped
 demo is running

@@ -22,7 +22,6 @@ curl https://api.zode.dev/v1/sandboxes \
 
 Keys look like `zode_tok_` followed by 64 hex characters. Create one in the console under **Settings**, **API keys**, or with `POST /v1/tokens`. The secret is shown once, in the create response.
 
-{/* untested */}
 ```bash
 curl https://api.zode.dev/v1/tokens \
   -H "Authorization: Bearer $ZODE_API_KEY" \

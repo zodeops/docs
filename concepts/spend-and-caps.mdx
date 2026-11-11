@@ -25,7 +25,6 @@ Running out of either does not stop anything. Sandboxes keep running, and usage 
 
 `max_cost_micros` caps the AI spend of one sandbox. Set it at create or fork; a fork without one keeps its parent's.
 
-{/* untested */}
 <CodeGroup>
 
 ```ts TypeScript
@@ -50,7 +49,6 @@ When the sandbox's AI spend reaches the cap, the host refuses its next AI calls 
 
 Owners and billing members set two caps with `PATCH /v1/billing` (also in the console, Billing). Absent leaves a value unchanged; `null` removes the cap. A cap is between $0.000001 and $100,000.
 
-{/* untested */}
 ```bash
 curl -s -X PATCH https://api.zode.dev/v1/billing \
   -H "Authorization: Bearer $ZODE_TOKEN" -H "Content-Type: application/json" \

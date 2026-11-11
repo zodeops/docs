@@ -9,7 +9,6 @@ A sandbox can run Chrome, which you drive from outside over the Chrome DevTools 
 
 Pass `browser` or `desktop` to `Sandbox.create` or `sbx.fork`, or switch a running sandbox:
 
-{/* untested */}
 ```ts
 const sbx = await Sandbox.create({ browser: true });
 await sbx.desktop.enable();
@@ -41,7 +40,6 @@ The URL looks like `wss://eu-1.nodes.zode.dev/cdp/...`. `transport` is `direct` 
 
 ### Playwright
 
-{/* untested */}
 ```ts
 import { chromium } from "playwright";
 import { Sandbox } from "@zodedev/sdk";
@@ -57,7 +55,6 @@ await browser.close(); // disconnects; Chrome keeps running in the sandbox
 
 ### Puppeteer
 
-{/* untested */}
 ```ts
 import puppeteer from "puppeteer-core";
 import { Sandbox } from "@zodedev/sdk";
@@ -89,7 +86,6 @@ Code running inside the sandbox reaches the same Chrome at `http://127.0.0.1:922
 
 Coordinates are screen pixels from the top left. While the desktop is off, these calls throw `desktop_off` (409).
 
-{/* untested */}
 ```ts
 import { writeFile } from "node:fs/promises";
 
@@ -106,7 +102,6 @@ await sbx.desktop.scroll(640, 400, { dy: 5 });
 
 `viewUrl()` returns a page URL to put in an iframe. Its ticket opens the page for 1 hour; an open page keeps its connection. By default the view is watch-only. `viewUrl({ control: true })` lets the viewer's mouse, keyboard, clipboard and file transfers reach the desktop. To switch modes, ask for a new URL.
 
-{/* untested */}
 ```ts
 const { url } = await sbx.desktop.viewUrl({ control: false });
 // <iframe src={url} allow="clipboard-read; clipboard-write; fullscreen; autoplay"></iframe>

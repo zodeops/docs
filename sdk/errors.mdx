@@ -81,7 +81,6 @@ The API answers errors as `{"error": {"code": "...", "message": "..."}}`. The me
 
 `no_capacity`, `node_full` and `rate_limited` clear on their own. Retry them with a growing delay. Do not retry `concurrency_limit` or `daily_cap_reached` in a loop: they clear only when you stop a sandbox or the cap changes.
 
-{/* untested */}
 ```ts
 import { Sandbox, ZodeError } from "@zodedev/sdk";
 

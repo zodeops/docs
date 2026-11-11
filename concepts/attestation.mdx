@@ -73,7 +73,6 @@ $ zode verify eu-central --json
 
 Auditors can check a release manifest and its Sigstore bundle without any host, which checks the signature and the log entry only:
 
-{/* untested */}
 ```bash
 zode verify --manifest host-release.json --bundle host-release.bundle.json
 ```
@@ -84,7 +83,6 @@ zode verify --manifest host-release.json --bundle host-release.bundle.json
 
 The API relays what the host reports, unchanged, plus the server's own verdict. Pass a fresh `nonce` (8 to 32 bytes, hex) so a TPM host quotes over it.
 
-{/* untested */}
 ```bash
 NONCE=$(openssl rand -hex 16)
 curl -s "https://api.zode.dev/v1/sandboxes/$ID/attestation?nonce=$NONCE" \

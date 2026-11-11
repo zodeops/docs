@@ -21,7 +21,6 @@ Every sandbox has five coding agents ("harnesses") installed. You connect your o
 
 Your keys are yours alone. They are never listed to other members, never pooled, and used only in sandboxes you created or forked. The API stores them sealed (AES-256-GCM) and only ever returns the last 4 characters.
 
-{/* untested */}
 ```bash
 curl -s https://api.zode.dev/v1/agents/credentials \
   -H "Authorization: Bearer $ZODE_TOKEN" \
@@ -43,7 +42,6 @@ Keys belong to a person, so an API key whose member has never signed in to Zode 
 
 `PATCH /v1/agents/settings` stores your default harness and a default model per harness. `""` clears a value. A model the harness does not list answers 400 `invalid_request`.
 
-{/* untested */}
 ```bash
 curl -s -X PATCH https://api.zode.dev/v1/agents/settings \
   -H "Authorization: Bearer $ZODE_TOKEN" \
@@ -57,7 +55,6 @@ The models offered are the ones Zode has prices for, so every default is metered
 
 The agent's SDK wants its key variable set, so set it to any placeholder. The proxy removes it and puts the real key in.
 
-{/* untested */}
 ```bash
 zode exec -e ANTHROPIC_API_KEY=zode box -- claude -p "fix the failing tests"
 zode exec -e OPENAI_API_KEY=zode box -- codex exec "add a /healthz endpoint"
@@ -74,7 +71,6 @@ Owners and admins can add shared workspace keys under `/v1/proxying`. Every role
 
 On a 429, 529 or 503 from the provider, the proxy puts that key on cooldown and resends the same request with the next key. The cooldown follows the provider's `Retry-After` (30 s for 429 and 10 s for 529 or 503 when there is none, at most 1 hour). If every key is throttled, the last 429 or 529 reaches the agent with its `Retry-After`, so the agent backs off. Once a response starts streaming, nothing is retried. A 401 or 403 does not fail over.
 
-{/* untested */}
 ```bash
 curl -s https://api.zode.dev/v1/proxying/keys \
   -H "Authorization: Bearer $ZODE_TOKEN" -H "Content-Type: application/json" \

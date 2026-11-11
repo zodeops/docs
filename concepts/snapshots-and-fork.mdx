@@ -20,7 +20,6 @@ A fork is a copy-on-write copy of a sandbox, memory and disk included. Processes
 
 You can fork a `running` or a `stopped` sandbox. A running parent is paused for a moment while its memory is saved and its disk is frozen at the same instant, then it carries on. The child comes back `running`.
 
-{/* untested */}
 <CodeGroup>
 
 ```bash CLI
@@ -57,7 +56,6 @@ Limits:
 
 A snapshot saves a sandbox's disk and memory at one instant, under a name. Restoring it rolls that same sandbox back to the saved point. Snapshots are in the API, the TypeScript SDK and the console (**Snapshots**, and a **Snapshots** tab on each sandbox). The CLI has no snapshot command.
 
-{/* untested */}
 <CodeGroup>
 
 ```ts TypeScript

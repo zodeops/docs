@@ -5,7 +5,6 @@ description: "Build an image from a Dockerfile or setup commands, then start san
 
 A custom image is a sandbox frozen after your setup ran, memory included. A sandbox made from it boots with your packages installed and your start command already running.
 
-{/* untested */}
 ```bash
 zode image build web -f Dockerfile
 zode new --image web
@@ -15,14 +14,12 @@ zode new --image web
 
 **A Dockerfile**, with `-f` (or `-f -` to read it from stdin):
 
-{/* untested */}
 ```bash
 zode image build web -f Dockerfile --size large
 ```
 
 **Setup commands**, with flags:
 
-{/* untested */}
 ```bash
 zode image build tools \
   --run "apt-get update && apt-get install -y jq" \
@@ -72,7 +69,6 @@ With any other base, such as `node:22`, `python:3.12` or a multi-stage build, Zo
 
 A dev server that is up when the sandbox boots:
 
-{/* untested */}
 ```dockerfile
 FROM zode/base
 ENV APP_ENV=dev
@@ -84,7 +80,6 @@ HEALTHCHECK CMD curl -fsS http://127.0.0.1:3000/ || exit 1
 
 A multi-stage image built with Docker:
 
-{/* untested */}
 ```dockerfile
 FROM python:3.12-slim AS build
 RUN pip wheel --wheel-dir /wheels requests
@@ -107,7 +102,6 @@ A build runs in a VM like any sandbox, with your workspace's network policy. No 
 
 `zode image build` follows the build log until the image is `ready` or `failed`. Warnings print first as `note:` lines. To read or follow a log later:
 
-{/* untested */}
 ```bash
 zode image logs web -f
 ```
@@ -143,7 +137,6 @@ Over a limit you get 409 `limit_reached`. A Dockerfile is at most 64 KB, 200 ste
 zode image ls
 ```
 
-{/* untested */}
 ```bash
 zode image rm web     # cancels a build, or deletes a ready or failed image
 ```

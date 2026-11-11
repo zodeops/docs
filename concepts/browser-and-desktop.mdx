@@ -21,7 +21,6 @@ On Free, asking for the desktop answers HTTP 403 `plan_required`: "the free plan
 
 At create, or on a fork, pass `browser` and `desktop`. Left out, a new sandbox uses the workspace default (console, Settings) and a fork keeps its parent's values.
 
-{/* untested */}
 <CodeGroup>
 
 ```bash CLI
@@ -46,7 +45,6 @@ curl -s https://api.zode.dev/v1/sandboxes \
 
 On a running sandbox, switch either one with `PATCH /v1/sandboxes/{id}/features`. It returns the sandbox.
 
-{/* untested */}
 <CodeGroup>
 
 ```bash CLI
@@ -88,7 +86,6 @@ Switching off stops the processes. Chrome's profile stays on disk, so cookies an
 
 The ticket in the URL opens a connection for 5 minutes. A connection that is open stays open. Ask again for a new URL each time you connect. `transport` is `direct` (straight to the host) or `relay` (through `api.zode.dev`, when the host has no public address). Only the WebSocket is exposed; the `/json` HTTP endpoints are not.
 
-{/* untested */}
 <CodeGroup>
 
 ```ts Playwright
@@ -125,7 +122,6 @@ Inside the sandbox, the same Chrome listens at `http://127.0.0.1:9222`, so an ag
 
 Screenshots and actions use screen pixels from the top left. `GET /v1/sandboxes/{id}/desktop` returns the screen size, `{"width": 1280, "height": 800}`.
 
-{/* untested */}
 <CodeGroup>
 
 ```bash CLI
@@ -162,7 +158,6 @@ A screenshot taken in the first second or two after switching the desktop on can
 
 `POST /v1/sandboxes/{id}/desktop/session` returns a page URL to embed. Its ticket opens the page for 1 hour; the open page keeps its own connection. The view is watch-only unless you send `{"control": true}`, which lets the viewer's mouse, keyboard, clipboard and file transfer through.
 
-{/* untested */}
 ```ts
 const { url } = await sb.desktop.viewUrl({ control: false });
 ```

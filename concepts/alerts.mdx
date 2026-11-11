@@ -22,7 +22,6 @@ Everyone in the workspace can read channels and rules. Owners and admins change 
 
 URLs and bot tokens are write-only. The API stores them sealed and shows only a hint, such as `hooks.slack.com …x9Qz`.
 
-{/* untested */}
 ```bash
 curl -s https://api.zode.dev/v1/alerts/channels \
   -H "Authorization: Bearer $ZODE_TOKEN" -H "Content-Type: application/json" \
@@ -71,7 +70,6 @@ The signature scheme is the same as [workspace webhooks](/concepts/webhooks-and-
 
 A rule routes one event type to one or more channels.
 
-{/* untested */}
 ```bash
 curl -s https://api.zode.dev/v1/alerts/rules \
   -H "Authorization: Bearer $ZODE_TOKEN" -H "Content-Type: application/json" \
@@ -104,7 +102,6 @@ A rule can hold alerts during daily quiet hours, for example `{"start": "22:00",
 
 Quiet hours use the workspace time zone, an IANA name, UTC by default:
 
-{/* untested */}
 ```bash
 curl -s -X PATCH https://api.zode.dev/v1/alerts \
   -H "Authorization: Bearer $ZODE_TOKEN" -H "Content-Type: application/json" \

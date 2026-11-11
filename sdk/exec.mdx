@@ -7,7 +7,6 @@ description: "Run commands in a sandbox with exec, stream output, and drive long
 
 ## exec
 
-{/* untested */}
 ```ts
 const r = await sbx.exec("node --version");
 console.log(r.exit_code, r.stdout); // 0 "v22...\n"
@@ -15,7 +14,6 @@ console.log(r.exit_code, r.stdout); // 0 "v22...\n"
 
 A string runs under `bash -lc`, so pipes, `&&` and globs work. An array runs as-is, with no shell:
 
-{/* untested */}
 ```ts
 await sbx.exec(["git", "clone", "https://github.com/expressjs/express", "/workspace/express"]);
 ```
@@ -47,7 +45,6 @@ A non-zero exit is a normal result, not an error. Pass `check: true` to throw a 
   A plain `exec("npm test")` uses the buffered route and is stopped after 30 s. For anything that may run longer, pass `timeoutMs` above 55000 or an output callback.
 </Warning>
 
-{/* untested */}
 ```ts
 const r = await sbx.exec("npm ci && npm test", {
   cwd: "/workspace/app",
@@ -82,7 +79,6 @@ For binary output, read a file with [`files.read`](/sdk/files) or use the raw ch
 
 `sbx.spawn(command?, options?)` opens the attach WebSocket and returns a `CommandHandle` at once. A string runs under `bash -lc`, an array runs as-is, and no command opens a login shell. It takes the same options as `exec` except `check`.
 
-{/* untested */}
 ```ts
 const h = sbx.spawn("npm run dev", { cwd: "/workspace/app" });
 for await (const chunk of h) {
@@ -111,7 +107,6 @@ Writes made before the socket opens are queued. If you pass `stdin` in the optio
 
 ### Interactive shell
 
-{/* untested */}
 ```ts
 const shell = sbx.spawn(undefined, { tty: true, rows: 40, cols: 120 });
 shell.sendStdin("cd /workspace && ls -la\nexit\n");

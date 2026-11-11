@@ -49,7 +49,6 @@ Every runner boots a clean image. There is no per-repository cache yet, so `cach
 
 Owners and admins set a cap on CI spend per UTC calendar month. `null` removes it.
 
-{/* untested */}
 ```bash
 curl -s -X PATCH https://api.zode.dev/v1/ci/settings \
   -H "Authorization: Bearer $ZODE_TOKEN" -H "Content-Type: application/json" \

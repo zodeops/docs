@@ -36,7 +36,6 @@ With `FROM zode/base` or `FROM ubuntu:24.04`, each Dockerfile line runs in a VM.
 
 In a `FROM zode/base` build, `RUN`, `ENV`, `ARG`, `WORKDIR` and `USER` shape the build, `CMD` or `ENTRYPOINT` becomes the start command, and `HEALTHCHECK` the ready check. `COPY` and `ADD` fail because there is no build context yet; fetch files with `RUN curl` or `git clone`. Instructions that do nothing in a sandbox, such as `EXPOSE` or `LABEL`, are skipped with a `note:` line.
 
-{/* untested */}
 ```dockerfile
 FROM zode/base
 RUN apt-get update && apt-get install -y ripgrep
@@ -45,7 +44,6 @@ RUN git clone https://github.com/acme/app . && npm ci
 ENV NODE_ENV=development
 ```
 
-{/* untested */}
 ```bash
 zode image build app-dev -f Dockerfile --size default
 ```
@@ -63,7 +61,6 @@ Any `note:` lines about skipped instructions come first. A failed build exits 1 
 
 The same image with setup flags:
 
-{/* untested */}
 ```bash
 zode image build app-dev --size default \
   --run 'apt-get update && apt-get install -y ripgrep' \
@@ -78,7 +75,6 @@ zode image build app-dev --size default \
 zode image ls
 ```
 
-{/* untested */}
 ```text
 NAME     STATUS    SIZE     FROM        BUILT
 app-dev  ready     default  dockerfile  2h ago

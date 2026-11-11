@@ -9,7 +9,6 @@ A `Sandbox` is one microVM. You get one from `Sandbox.create`, `Sandbox.get` or 
 
 `Sandbox.create(options)` resolves once the VM is running.
 
-{/* untested */}
 ```ts
 import { Sandbox } from "@zodedev/sdk";
 
@@ -57,7 +56,6 @@ The options type also has `ramMb` and `diskGb`. Leave them out. If you pass them
 
 `Sandbox.create` has no `image` option yet. The API accepts `image` (an `img_` id or image name), so call it through `zode.request` and load the result:
 
-{/* untested */}
 ```ts
 import { Zode, type SandboxInfo } from "@zodedev/sdk";
 
@@ -104,7 +102,6 @@ const byName = mine.find((s) => s.name === "fix-login");
 
 ## Stop and start
 
-{/* untested */}
 ```ts
 await sbx.stop();  // status "stopped"
 await sbx.start(); // status "running"
@@ -122,7 +119,6 @@ await sbx.start(); // status "running"
 
 `create`, `start` and `fork` already resolve once the sandbox is running. Use `waitUntilRunning` for a sandbox you loaded while it was `creating` or `starting`:
 
-{/* untested */}
 ```ts
 const sbx = await Sandbox.get("sbx_ilvsd743b36wqi26");
 await sbx.waitUntilRunning({ timeoutMs: 60_000, intervalMs: 500 });
@@ -134,7 +130,6 @@ It polls every `intervalMs` (default 1000) and gives up after `timeoutMs` (defau
 
 `sbx.fork(options)` makes a copy-on-write copy of the sandbox, memory and disk included, and resolves with the new running `Sandbox`.
 
-{/* untested */}
 ```ts
 const attempt = await sbx.fork({ name: "fix-login-try-2", gitBranch: "fix-login-2" });
 ```

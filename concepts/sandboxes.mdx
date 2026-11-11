@@ -71,7 +71,6 @@ Stopping hibernates the sandbox. Its memory and disk are saved, running processe
 
 Deleting removes the sandbox, its disk and its snapshots. Billing for it ends. You cannot undo a delete. Forks of a deleted sandbox keep working.
 
-{/* untested */}
 ```bash
 zode stop demo      # demo is stopped
 zode start demo     # demo is running
@@ -92,7 +91,6 @@ There are two ways to run something in a sandbox.
 
 The CLI uses attach for both `zode exec` and `zode ssh`. `zode exec` streams output and exits with the command's exit code. It runs the arguments after `--` as is, so wrap shell syntax in `bash -lc`:
 
-{/* untested */}
 ```bash
 zode exec demo -- npm test
 zode exec demo -- bash -lc 'ls /workspace | wc -l'
@@ -107,7 +105,6 @@ If the kernel kills a command for running out of memory, the result says so (`oo
 
 You can label a sandbox with the git repo, branch and pull request it works on. Zode does not clone anything: the labels are for cost breakdowns. `zode cost --by repo` (or `branch`, `pr`) groups spend by them, as does the console's Usage page.
 
-{/* untested */}
 <CodeGroup>
 
 ```bash CLI

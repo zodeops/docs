@@ -5,7 +5,6 @@ description: "Read, write, list and remove files inside a sandbox with sbx.files
 
 `sbx.files` reads and writes files inside the VM. Paths are paths in the sandbox, such as `/workspace/app/package.json`. The sandbox must be running.
 
-{/* untested */}
 ```ts
 await sbx.files.write("/workspace/app/.env.test", "DATABASE_URL=postgres://localhost/test\n");
 const pkg = JSON.parse(await sbx.files.readText("/workspace/app/package.json"));
@@ -45,7 +44,6 @@ What follows from that:
 
 To copy a directory tree, pack it in the sandbox and read the archive:
 
-{/* untested */}
 ```ts
 import { writeFile } from "node:fs/promises";
 
@@ -60,7 +58,6 @@ When the command fails, the method throws a `CommandError`. It is a `ZodeError` 
 - `exitCode`: the command's exit code
 - `stderr`: what the command printed, such as `cat: /workspace/missing.txt: No such file or directory`
 
-{/* untested */}
 ```ts
 import { CommandError } from "@zodedev/sdk";
 
