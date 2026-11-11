@@ -7,7 +7,7 @@ A custom image is a sandbox disk with your tools already installed. You build it
 
 ```bash
 zode image build <name> -f Dockerfile [--size S] [--timeout MIN] [--detach]
-zode image build <name> --run CMD [--run CMD ...] [-e K=V] [--workdir DIR] [--start CMD] [--ready CMD] [--size S]
+zode image build <name> --run CMD [--run CMD ...] [-e K=V] [--workdir DIR] [--start CMD] [--ready CMD] [--size S] [--timeout MIN]
 zode image ls
 zode image logs <image> [-f]
 zode image rm <image>
@@ -22,14 +22,14 @@ Give either a Dockerfile (`-f`) or setup flags (`--run` and friends), not both.
 
 | Flag | Effect |
 |---|---|
-| `-f FILE` | Build from a Dockerfile. `-f -` reads it from stdin (up to 1 MiB). |
+| `-f FILE` | Build from a Dockerfile. `-f -` reads it from stdin. A Dockerfile over 64 KB, from a file or stdin, is refused before upload. |
 | `--run CMD` | A setup command. Repeat for more; they run in order. |
 | `-e KEY=VALUE` | A variable kept in the image. Repeat for more. |
 | `--workdir DIR` | Working directory for the setup commands. |
 | `--start CMD` | Command that runs when a sandbox boots from the image. |
 | `--ready CMD` | Check that the start command is up: it passes when it exits 0. |
 | `--size S` | `small`, `default`, `large` or `xlarge`. Default `small`. Sandboxes from the image keep this size. |
-| `--timeout MIN` | Build time limit in minutes, 1 to 60. Default 30. |
+| `--timeout MIN` | Stop the build after this many minutes, 1 to 60. Default 30. |
 | `--detach` | Start the build and return without following the log. |
 
 With `FROM zode/base` or `FROM ubuntu:24.04`, each Dockerfile line runs in a VM. Any other `FROM` is built with `docker build` inside the VM.
