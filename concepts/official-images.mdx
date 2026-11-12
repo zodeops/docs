@@ -1,0 +1,56 @@
+---
+title: "Official images"
+description: "Images Zode builds and keeps up to date for every workspace: the CI image behind runs-on: zode, and a base image for sandboxes."
+---
+
+import { OfficialImages } from "/snippets/official-images.jsx"
+
+An official image is a [custom image](/concepts/images) that Zode builds and maintains. Every workspace can use it, on every host and in every size. You do not build it or keep it up to date.
+
+## The two lines
+
+| Line | Used by | What it has |
+|---|---|---|
+| `ci-ubuntu-24.04` | Every CI job with `runs-on: zode-*` | The base image plus a CI toolset close to GitHub's Ubuntu 24.04 runner: AWS CLI, the hosted tool cache, `ImageOS` and more. |
+| `base` | Sandboxes that ask for `zode/base` | The base image plus a set of everyday tools. |
+
+CI picks `ci-ubuntu-24.04` on its own. You do not set anything. See [CI](/concepts/ci).
+
+To start a sandbox from the base line, ask for `zode/base`:
+
+```bash
+zode new --image zode/base
+```
+
+In the API, pass `"image": "zode/base"` to `POST /v1/sandboxes`.
+
+A custom image you build has one size. An official image is built in every size, so the sandbox keeps the size you ask for and gets that size's build.
+
+## How updates roll out
+
+Each new version of a line is one release.
+
+1. Zode builds the release on every host and in every size.
+2. When every build is ready, the release goes live everywhere at once. New sandboxes and CI jobs use it from that moment.
+3. The previous version is kept for 24 hours, then deleted. Sandboxes already running from it keep running.
+
+If any build fails, the release is dropped and the current version stays live. If a line has nothing published yet, sandboxes that ask for it get 409 `invalid_state`, and CI jobs boot the plain base image for their size.
+
+## Differences from GitHub-hosted runners
+
+The CI image follows GitHub's Ubuntu 24.04 runner, with these differences:
+
+- Jobs run as root.
+- PostgreSQL and Redis are installed but stopped. Start the service in a step before the job uses it.
+- There is no Android SDK and no .NET.
+- There are no macOS or Windows runners.
+
+## Source
+
+The Dockerfiles live in [zodeops/runner-images](https://github.com/zodeops/runner-images). Every release is built from a commit on its `main` branch, and the list below links to that commit.
+
+## What is installed now
+
+This list comes from the live catalogue at `GET https://api.zode.dev/v1/official-images`. It needs no API key. Each release records the software its build reports, so the list matches what your sandbox or job gets.
+
+<OfficialImages />

@@ -54,6 +54,7 @@
               "concepts/sandboxes",
               "concepts/snapshots-and-fork",
               "concepts/images",
+              "concepts/official-images",
               "concepts/environments-and-secrets",
               "concepts/browser-and-desktop",
               "concepts/agents",

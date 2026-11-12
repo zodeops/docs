@@ -38,6 +38,12 @@ description: "User-facing changes to Zode: the API, CLI, SDK, console and sandbo
 - `sbx.restore(snap)` refuses another sandbox's snapshot with `wrong_sandbox`.
 - The missing-key error points to the console's API keys page.
 
+**Official images**
+
+- Zode now builds [official images](/concepts/official-images) for every workspace, in every size, on every host. CI jobs (`runs-on: zode-*`) use `ci-ubuntu-24.04`. Sandboxes can ask for `zode/base` with `zode new --image zode/base` or `"image": "zode/base"`.
+- A new version goes live on every host at once when all its builds are ready. The previous version is kept for 24 hours.
+- `GET /v1/official-images` lists each published line with its version, sizes and installed software. It needs no API key. The Dockerfiles are in [zodeops/runner-images](https://github.com/zodeops/runner-images).
+
 **Capacity**
 
 - A second host in `eu-central` adds room for more sandboxes.

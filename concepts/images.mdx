@@ -5,6 +5,8 @@ description: "Build an image from a Dockerfile or setup commands, then start san
 
 A custom image is a sandbox frozen after your setup ran, memory included. A sandbox made from it boots with your packages installed and your start command already running.
 
+Zode also builds [official images](/concepts/official-images) that every workspace can use in every size.
+
 ```bash
 zode image build web -f Dockerfile
 zode new --image web
