@@ -1,0 +1,30 @@
+name: check
+
+# Broken internal links in the docs, on Zode CI (pilot, zoded task 47).
+# Mintlify builds and deploys the site itself; this only checks.
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: check-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  links:
+    name: Broken links
+    runs-on: zode-2x4
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: "22"
+      - name: Broken links
+        run: npx --yes mint@4.3.23 broken-links
