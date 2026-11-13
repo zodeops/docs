@@ -9,13 +9,13 @@ For a change, Zode works out which tests can reach it and records the path for e
 |---|---|---|
 | **Off** | Everything. Nothing is asked. | Available |
 | **Shadow** | Everything. Each test is recorded as selected, skipped or full run, with why. | Available; the default for every repository |
-| **Enforce** | Only the selected tests; the skipped ones run afterwards in a background copy of the machine. | Not available yet |
+| **Enforce** | Only the selected tests; the skipped ones run afterwards in a background copy of the machine. | Available after 200 clean Shadow runs |
 
 Selection needs the test step wrapped in [`zode-ci test`](/ci/zode-ci-test) and the base branch in the checkout (`fetch-depth: 0`). Without the history it records `change_set_unknown` and a full run.
 
 ## Setting the mode
 
-Owners and admins set it with the API (the console gets a switch on the repository's Tests tab):
+Owners and admins set it on the repository's **Tests** tab in the console, or with the API:
 
 ```bash
 curl -s https://api.zode.dev/v1/ci/selection -H "Authorization: Bearer $ZODE_TOKEN"
@@ -25,7 +25,41 @@ curl -s -X PATCH https://api.zode.dev/v1/ci/selection \
   -d '{"repo": "acme/api", "mode": "off"}'
 ```
 
-`enforce` answers `409 enforce_not_available` until the repository has earned it (below). Every change is audited as `ci.selection_mode`.
+`enforce` answers `409 enforce_not_ready` until the repository has earned it, with how many runs it has and how many are left, for example "Enforce opens after 200 Shadow runs with no miss on this repository; it has 37, 163 to go". `GET /v1/ci/selection` shows `clean_shadow_runs`, `runs_needed`, `enforce_open`, `enforce_since`, `background_policy`, `last_miss_at` and `misses` for each repository. Every change is audited as `ci.selection_mode`.
+
+## Enforce
+
+A repository can move to Enforce after 200 Shadow runs with no would-be miss since its last miss. A run counts when selection made a decision (no run-everything rule applied) and its results arrived. A Shadow run with a would-be miss starts the count again.
+
+In Enforce, `zode-ci` runs only the selected test files and records each skipped file with the reason it was skipped. The step's exit code is the command's. A command it cannot narrow (Jest or Vitest naming paths itself, for example) runs everything and says why. With `--shards`, the selected files are split across shards.
+
+The default branch always runs the full suite, in every mode.
+
+## The background full run
+
+Skipping a test does not mean never running it. When the selected tests pass, Zode takes a disk copy of the job's machine. Once GitHub has the job's result, that copy runs the skipped tests as the step's user, without the job token, the runner's registration or the checkout credentials. A failure there never changes the job's result; it is a miss (below).
+
+Which runs get one is set per repository with `background_policy`:
+
+| Policy | Background run |
+|---|---|
+| `every` (default) | Every run |
+| `sample` | One commit in ten |
+| `default_branch` | Only on the default branch, which already runs everything, so in practice none on other branches |
+
+For the first 14 days after a repository enters Enforce, every run gets one whatever the policy.
+
+```bash
+curl -s -X PATCH https://api.zode.dev/v1/ci/selection \
+  -H "Authorization: Bearer $ZODE_TOKEN" -H "Content-Type: application/json" \
+  -d '{"repo": "acme/api", "background_policy": "sample"}'
+```
+
+A background run is one machine of the runner's size on the runner's node. When the node has no room it waits up to 15 minutes, then ends as `no_room`. It is billed at the normal compute price as its own `background` line on the job, next to the runner. `GET /v1/ci/background-runs?job=<id>` and `background_runs` on `GET /v1/ci/jobs/{id}` show each run: `forking`, `waiting`, `running`, then `passed`, `failed`, `error` (results unknown, never counted as passed) or `no_room`.
+
+<Note>
+The plan reports the background result to GitHub as a second check run, **Zode full suite**. That needs the Zode GitHub App to have the Checks permission (read and write), which it does not have yet. Until the permission is added and accepted on your installation, the result is on the job page in the console, in the API, in alerts and in webhooks, but not on the pull request.
+</Note>
 
 ## How tests are matched to a change
 
@@ -44,9 +78,6 @@ The full suite runs when a change touches a lockfile, a package manifest, a CI w
 A miss is a test that selection would have skipped and that failed. It is the one number that says whether skipping is safe for a repository.
 
 - **In Shadow** every test runs, so a miss costs nothing: Zode sees that a skipped test failed and counts a would-be miss (`outcome.would_miss` on `GET /v1/ci/selection-runs`). A repository can move to Enforce only after 200 Shadow runs in a row with no miss.
-- **In Enforce** the default branch still runs the full suite, and on other branches the skipped tests run in a background copy of the machine after the check has reported, as a second check, **Zode full suite**. A skipped test that fails there is a miss: Zode stores the commit, the test and why it was skipped, alerts you, and puts the repository back in Shadow until its map is rebuilt.
+- **In Enforce** a skipped test that fails in the background full run is a miss. Zode stores it in the miss ledger (commit, branch, test, file, why it was skipped, the failure message), sends one `ci.selection_miss` event to alerts (critical, so quiet hours never hold it) and webhooks, and puts the repository back in Shadow. The 200-run count starts again from the miss, and the next full run records the pytest map again. `GET /v1/ci/selection-misses?repo=<owner/name>` lists the ledger; the repository's **Tests** tab shows it too.
 - The target is zero misses per 100,000 skipped tests, and misses are published, not hidden.
 
-<Note>
-The background full suite, the miss ledger and Enforce are not built yet. Until they are, every repository runs every test, and the miss count you see is the Shadow count of would-be misses.
-</Note>
