@@ -30,4 +30,4 @@ Each worker is billed at the runner's price from its creation to its deletion, a
 ## Not yet
 
 - **Workers with memory.** A worker that keeps the runner's running services (a Postgres started by the job, for example) would skip starting them again, but it copies the runner process too. It stays off until a check proves a worker never holds the runner's session or the job's secrets. Today a `container:` job's services are started again on each worker.
-- **Numbers.** Sharded times on the [benchmark](/ci/benchmark) are pending: the target is a 10-minute suite in at most 2 minutes on 8 shards, fork time included, with shards ending within 15% of each other. This page will link the measured run when it is published.
+- **Numbers.** Sharded times are not published yet: the target is a 10-minute suite in at most 2 minutes on 8 shards, fork time included, with shards ending within 15% of each other. This page will link the measured run when it is published.

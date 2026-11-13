@@ -34,7 +34,7 @@ The newest 2 snapshots per key are kept. One nobody started from for 14 days goe
 ## Turn off setup-go's own cache
 
 <Warning>
-If a job uses `actions/setup-go` with its default cache, set `cache: false` on Zode. The warm disk already holds the Go module and build caches, and the action still downloads its own cache archive and extracts it over them. On the helm benchmark, **Setup Go** took 35 s from a clean disk and 67 to 107 s from a warm one with the action's cache on.
+If a job uses `actions/setup-go` with its default cache, set `cache: false` on Zode. The warm disk already holds the Go module and build caches, and the action still downloads its own cache archive and extracts it over them. On helm's own workflow, **Setup Go** took 35 s from a clean disk and 67 to 107 s from a warm one with the action's cache on.
 
 ```yaml
 - uses: actions/setup-go@v5
@@ -64,4 +64,4 @@ curl -s -X PATCH https://api.zode.dev/v1/ci/snapshots/settings \
 - **No pull-request-only snapshots.** The plan let a same-repository pull request keep a snapshot of its own. GitHub hands a runner to any queued job of the repository with the same labels before Zode knows which job took it, so a disk warmed by a pull request could reach a default-branch job. So pull requests read the shared snapshot and keep nothing.
 - **No per-workspace encryption on nodes yet.** Snapshots are kept apart by workspace and checked on every use, but they sit in the node's storage pool like every sandbox disk, without a key of their own per workspace.
 - **Snapshots stay on their node.** When that node is full, the runner starts clean on another one.
-- **Speed.** The goal is dependency installs and image pulls 5x faster on the second run. Some steps reach it (Node and Go setup, Ruby gems); others do not yet (apt, Maven, Docker builds). The [benchmark](/ci/benchmark) shows the whole job.
+- **Speed.** The goal is dependency installs and image pulls 5x faster on the second run. Some steps reach it (Node and Go setup, Ruby gems); others do not yet (apt, Maven, Docker builds).
