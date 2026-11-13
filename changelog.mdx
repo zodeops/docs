@@ -3,11 +3,22 @@ title: "Changelog"
 description: "User-facing changes to Zode: the API, CLI, SDK, console and sandboxes, newest first."
 ---
 
+<Update label="2026-11-13" description="Free credit with no card; console welcome">
+**Billing**
+
+- Your Personal workspace now starts with the $10 of free credit at sign-up, no card needed. A team workspace still gets its $10 when its first card is saved, and nothing is granted twice. When credit runs out without a card, sandboxes stop as before. See [Pricing](/pricing#when-credit-runs-out).
+
+**Console**
+
+- A three-step welcome on your first visit: run a sandbox on your credit, connect your agent, add a card. Open it again from **Get started** on an empty Sandboxes list, from the command palette, or at `console.zode.dev/?welcome`.
+- Images is in tabs, like the other pages: Your images, Official and Base images.
+</Update>
+
 <Update label="2026-11-11" description="Billing, API, CLI and SDK updates; capacity">
 **Billing**
 
 - Storage is free for the first 48 hours of every sandbox, forks included. After that it is billed on the provisioned disk as before. Compute prices are unchanged.
-- Running sandboxes needs a card on file or credit left. A workspace with neither gets 402 `credit_exhausted` on create, fork and start, and its running sandboxes are stopped (hibernated, never deleted) within about 15 minutes. New workspaces start with $0 of credit; saving the first card adds the $10 signup credit. Workspaces with a card keep running and are invoiced monthly. Enterprise is exempt. See [Pricing](/pricing#a-card-is-required-to-run-sandboxes).
+- Running sandboxes needs a card on file or credit left. A workspace with neither gets 402 `credit_exhausted` on create, fork and start, and its running sandboxes are stopped (hibernated, never deleted) within about 15 minutes. New workspaces start with $0 of credit; saving the first card adds the $10 signup credit. Workspaces with a card keep running and are invoiced monthly. Enterprise is exempt. See [Pricing](/pricing#when-credit-runs-out).
 - A Pro trial now gets Pro's limits: 15 sandboxes running at once, 20 custom images kept and 2 building at once, and the desktop.
 - Enterprise keeps flight recorder data for 90 days.
 - The `balance.low`, `invoice.created`, `invoice.paid` and `invoice.payment_failed` webhooks and alerts are now sent. See [Webhooks](/concepts/webhooks-and-telemetry#event-types).

@@ -44,7 +44,7 @@ AI calls from a sandbox go out on your own provider keys. They are not on your i
 | | Free | Pro | Team | Enterprise |
 |---|---|---|---|---|
 | Monthly fee | $0 | $20 | $100 | Contract |
-| Included usage | $10 one-time credit, after a card check | $20 a month, no rollover | None | Contract |
+| Included usage | $10 one-time credit, no card to start | $20 a month, no rollover | None | Contract |
 | Sandboxes running at once | 2 | 15 | 50 | Per contract |
 | Browser (Chrome over CDP) | Yes | Yes | Yes | Yes |
 | Linux desktop | No | Yes | Yes | Yes |
@@ -53,13 +53,13 @@ AI calls from a sandbox go out on your own provider keys. They are not on your i
 | Audit log CSV export | No | No | Yes | Yes |
 
 - **Included usage** covers compute and storage. On Pro, the $20 resets each month; unused usage does not carry over. Usage past it is billed at the rates above.
-- **Free credit** is granted once per workspace when you first save a card. A new workspace starts with $0 of credit.
+- **Free credit**: $10, once. Your Personal workspace has it from sign-up, with no card. A team workspace starts with $0 and gets its $10 when its first card is saved.
 - **Running at once** counts sandboxes that are creating, running or starting. Over the limit, a create, fork or start fails: "Your free plan runs at most 2 sandboxes at once. Stop one first."
 - **Desktop on Free** fails with `plan_required` (402): "the free plan does not include the desktop; upgrade in Billing".
 
-A workspace on Free can start a 7-day Pro trial in **Billing** once. During the trial the workspace gets Pro's limits: 15 sandboxes running at once, 20 custom images kept and 2 building at once, and the desktop. Pro's fee and included usage do not apply, and nothing is charged when it ends. The trial itself needs no card, but running sandboxes does (see below), so add a card or credit to use it.
+A workspace on Free can start a 7-day Pro trial in **Billing** once. During the trial the workspace gets Pro's limits: 15 sandboxes running at once, 20 custom images kept and 2 building at once, and the desktop. Pro's fee and included usage do not apply, and nothing is charged when it ends. The trial needs no card; its sandboxes run on the workspace's credit (see below).
 
-## A card is required to run sandboxes
+## When credit runs out
 
 To run sandboxes, a workspace needs a payment method on file or credit left. A workspace with no card whose remaining credit is $0 or less:
 
@@ -68,7 +68,7 @@ To run sandboxes, a workspace needs a payment method on file or credit left. A w
 
 Saving a card or buying credit lifts the block at once. Stopped sandboxes stay stopped until you start them.
 
-New workspaces start with $0 of credit, so save a card in **Billing** before your first sandbox. Saving the first card also grants the $10 signup credit. Workspaces with a card keep running when credit runs out, and usage past the included amount is invoiced monthly. Enterprise workspaces are billed by contract and are never stopped for credit.
+Your Personal workspace starts with $10, so your first sandboxes need no card. Add one in **Billing** before the credit runs out to keep sandboxes running. Workspaces with a card keep running when credit runs out, and usage past the included amount is invoiced monthly. Enterprise workspaces are billed by contract and are never stopped for credit.
 
 ## What is billed per second
 

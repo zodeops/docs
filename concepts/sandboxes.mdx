@@ -146,7 +146,7 @@ On the CLI, pass `--max-cost` in dollars to `zode new` or `zode fork`; in the SD
 ## Limits
 
 - **Running at once**: Free 2, Pro 15, Team 50; a Pro trial gets Pro's 15. Sandboxes that are `creating`, `running` or `starting` count; stopped ones do not. Over the limit, create, fork and start return 409 `concurrency_limit`.
-- **Credit**: a workspace with no card on file and no credit left cannot create, fork or start sandboxes (402 `credit_exhausted`), and its running sandboxes are stopped. See [Pricing](/pricing#a-card-is-required-to-run-sandboxes).
+- **Credit**: a workspace with no card on file and no credit left cannot create, fork or start sandboxes (402 `credit_exhausted`), and its running sandboxes are stopped. See [Pricing](/pricing#when-credit-runs-out).
 - **Create rate**: creates and forks are limited to 30 an hour per user, 60 an hour per workspace and 60 an hour per client IP. Over it you get 429 `rate_limited` with `Retry-After` and `X-RateLimit-*` headers.
 - **Daily cap**: if your workspace has a daily spend cap and today's spend (UTC) has reached it, create, fork and start return 409 `daily_cap_reached`.
 - **Same host**: a fork runs on its parent's host, and a stopped sandbox starts on its own host. When that host has no free memory you get 409 `node_full`.
