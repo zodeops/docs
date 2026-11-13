@@ -1,0 +1,45 @@
+---
+title: "zode-ci test"
+description: "Wrap a test command to store each test's result and duration. It never changes what runs or the job's result."
+---
+
+```
+zode-ci test [flags] -- <command> [args...]
+```
+
+Everything after `--` is the command, run as given, without a shell. For a pipeline use `-- sh -c '...'`, and pair it with `--runner` or `--junit`, since `zode-ci` cannot see the runner inside a shell.
+
+| Flag | Default | Meaning |
+|---|---|---|
+| `--runner auto\|jest\|vitest\|pytest\|go\|junit` | `auto` | Which test runner the command starts. `auto` detects it. |
+| `--junit <path>` | none | The command writes JUnit XML itself; read it from this path (a glob is allowed) when the command ends. For runners `zode-ci` does not recognise. |
+| `--name <label>` | the runner's name | Tells several wrapped steps of one job apart. 1 to 64 characters of `a-z 0-9 . _ -`. |
+| `--shards <n>\|auto` | `1` | Split the suite across copies of the job's machine. See [Shards](/ci/shards). |
+| `--select auto\|off` | `auto` | `auto` follows the repository's [selection mode](/ci/selection); `off` always runs everything. |
+| `--no-report` | off | Run and parse, print the summary, store nothing. |
+
+## Runners it understands
+
+| Runner | Detected from | What `zode-ci` adds |
+|---|---|---|
+| Jest | `jest` | `--json --outputFile=<tmp>` |
+| Vitest | `vitest` | a JSON reporter next to the default one |
+| pytest | `pytest`, `py.test`, `python -m pytest` | a JUnit report through `PYTEST_ADDOPTS` |
+| go test | `go test` | `-json`, turned back into normal output in the log |
+| Anything else | `--junit <path>` | nothing |
+
+`auto` looks through `npx`, `pnpm exec`, `yarn`, `bunx`, `node_modules/.bin/`, `python -m`, `uv run` and `poetry run`. For `npm test`, `npm run <script>`, `pnpm` and `yarn` scripts it reads `package.json` and detects the runner when the script is a single command. `make test`, `turbo`, `nx` and shell scripts are not detected: the command runs unchanged and nothing is stored, with a notice naming `--runner` and `--junit`. When the command already asks for the same report, `zode-ci` reads yours instead of adding its own.
+
+Playwright and cargo-nextest work today through `--junit`.
+
+## Exit code
+
+Always the command's own (a command killed by signal `n` gives `128+n`). The only codes of its own come before the command starts: `2` for a usage error, `127` when the command is not found.
+
+## Where results go
+
+Each run is stored with its counts and every test's result, duration and, when selection ran, its decision. Read them in the console on the job, or with the API: `GET /v1/ci/test-runs?repo=<owner/name>`, `GET /v1/ci/test-runs/{id}` and `GET /v1/ci/test-runs/{id}/tests`.
+
+## Why there is a line to add
+
+Zode does not rewrite your test step. We checked 236 test steps in 37 popular repositories: only about one in five is a single command whose runner could be named safely, and guessing wrong would break a passing build. Wrapping stays one explicit line.

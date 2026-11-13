@@ -1,0 +1,53 @@
+---
+title: "Benchmark"
+description: "How the weekly CI benchmark at zode.dev/benchmark is run, what each number means, and how to rerun one repository yourself."
+---
+
+The numbers are at [zode.dev/benchmark](https://zode.dev/benchmark). The scripts and every run are public in [zodeops/ci-bench](https://github.com/zodeops/ci-bench). Today Zode is slower than GitHub-hosted runners on every repository in the set; the page shows by how much, and that stays on the page until it changes.
+
+## What runs
+
+Ten open-source repositories (excalidraw, alpine, jquery, starlette, httpx, saleor, fzf, helm, nginx-proxy, spring-petclinic) and one Caddy build, each at a pinned commit, each with its own unchanged GitHub Actions workflow. Each repository is mirrored into `zodeops/bench-<name>`; the only edit is `runs-on` and a manual trigger, and `git show HEAD` in a mirror shows the whole difference.
+
+Every Sunday at 02:00 UTC the same workflow runs on GitHub-hosted `ubuntu-24.04` and on `zode-4x8`, 3 times each, cold and warm:
+
+- **Cold**: the branch's Actions caches are deleted first, and on Zode there is no warm snapshot to start from.
+- **Warm**: right after the cold run, with what it saved.
+
+## What each number means
+
+| Number | Meaning |
+|---|---|
+| Wall | Dispatch to the last job done. Includes the queue. |
+| Queue | GitHub's created-to-started time for the job that waited longest. |
+| Price, GitHub | The list price of the same machine on a private repository: the Linux 4-core larger runner at $0.012 a minute, each job rounded up to the minute. Public repositories run free. |
+| Price, Zode | What the run was billed, from the Zode API. Marked `~` when it is an estimate (the job ran on a runner started for another run, which carries the bill). |
+| Zode against GitHub | GitHub's wall time divided by Zode's. "Slower" is a loss. |
+
+Each cell is the median run by wall time (the lower of the two middle runs when the count is even), and its queue and price come from that same run, so every number links to one real run. Runs that passed come first; a cell with no passing run says so.
+
+| | GitHub-hosted | Zode |
+|---|---|---|
+| Runner | `ubuntu-24.04` | `zode-4x8` |
+| Machine | 4 vCPU, 16 GB RAM, 14 GB SSD (public repository) | 4 vCPU, 8 GB RAM, a microVM on a GCE n2-standard-16 node in europe-west1 with nested virtualisation, shared with real CI |
+
+## Columns still pending
+
+- **Selected**: every run is the full suite. Selected-test runs need [Enforce](/ci/selection), which is not available yet.
+- **Shards**: the benchmark workflows run without `zode-ci`, so they are single-machine. Sharded numbers follow once the [shard](/ci/shards) proof is published.
+
+## Other providers
+
+Before running anyone else's runners we read their terms. Where publishing is allowed, a provider joins the weekly run once there is an account to run it on; until then the page cites each provider's own claims as self-reported, with links. The terms we read and what they say are in [`PROVIDERS.md`](https://github.com/zodeops/ci-bench/blob/main/PROVIDERS.md).
+
+## Rerun one repository
+
+```bash
+git clone https://github.com/zodeops/ci-bench && cd ci-bench
+export BENCH_OWNER=<your GitHub account>
+scripts/mirror.sh helm
+scripts/bench.py --repos helm --runs 3 --runners ubuntu-24.04 --out results/mine
+scripts/site-data.py results/mine
+```
+
+GitHub-hosted runs need only `gh`. Zode runs also need the Zode GitHub App on your mirror and a token in `ZODE_TOKEN`. Your median should land within 15% of the published one; if it does not, open an issue on ci-bench with your `results/mine/runs.jsonl`.

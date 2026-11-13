@@ -61,8 +61,19 @@
               "concepts/spend-and-caps",
               "concepts/webhooks-and-telemetry",
               "concepts/alerts",
-              "concepts/ci",
               "concepts/attestation"
+            ]
+          },
+          {
+            "group": "CI",
+            "pages": [
+              "concepts/ci",
+              "ci/move-a-workflow",
+              "ci/zode-ci-test",
+              "ci/shards",
+              "ci/selection",
+              "ci/warm-snapshots",
+              "ci/benchmark"
             ]
           },
           {

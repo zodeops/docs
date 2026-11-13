@@ -1,0 +1,84 @@
+---
+title: "Move a workflow to Zode"
+description: "Change one line, runs-on, and a GitHub Actions job runs on Zode. Wrap the test command in zode-ci test to record results, shard and select tests."
+---
+
+A GitHub Actions job moves to Zode by changing its `runs-on`. Nothing else in the workflow changes: the runner image looks like GitHub's `ubuntu-24.04`, the job runs as the `runner` user in `/home/runner/work`, and `actions/cache`, the `cache:` option of the `setup-*` actions and Buildx `type=gha` keep working.
+
+## Before you start
+
+An owner or admin installs the Zode GitHub App once, in the console under **Configure**, **CI**, and picks the repositories. See [CI](/concepts/ci) for the app's permissions and the monthly cap.
+
+## The one-line switch
+
+```diff
+ jobs:
+   test:
+-    runs-on: ubuntu-latest
++    runs-on: zode-4x8
+```
+
+That line alone gets you:
+
+- **Standby runners.** A repository that ran a job in the last 30 minutes keeps a runner already started and connected to GitHub, so the next job of that size starts without waiting for a machine. Standby time is not billed.
+- **Warm snapshots.** A green job on the default branch leaves its caches, checkout, tool cache and Docker images on a disk the next job of the same key starts from. See [Warm snapshots](/ci/warm-snapshots) for what is kept and who may write it.
+- **A local Actions cache.** Each node answers GitHub's cache API, so restores come from the node's disk instead of GitHub's storage, with GitHub's branch rules.
+
+Use `ubuntu-24.04`, not `ubuntu-latest`, as the GitHub side when you compare: GitHub's `ubuntu-latest` moved to Ubuntu 26.04, and Zode's CI image is 24.04.
+
+| Label | vCPU | RAM |
+|---|---|---|
+| `zode` or `zode-2x4` | 2 | 4 GB |
+| `zode-4x8` | 4 | 8 GB |
+| `zode-8x16` | 8 | 16 GB |
+| `zode-16x32` | 16 | 32 GB |
+
+## The second line: zode-ci test
+
+Sharding and test selection need to know which command runs the tests. Wrap it:
+
+```diff
+-      - run: python -m pytest
++      - run: zode-ci test -- python -m pytest
+```
+
+`zode-ci` is on every Zode runner. It runs the command unchanged, passes its output through, exits with the command's exit code and stores every test's result and duration. Nothing `zode-ci` does on its own (no token, the API down, a report it cannot parse) changes the job's result. See [zode-ci test](/ci/zode-ci-test).
+
+## A complete workflow
+
+This is the workflow `zodeops/ci-bench` runs on Zode for its own tests, as written here:
+
+```yaml .github/workflows/test.yml
+name: test
+on:
+  push:
+    branches: [main]
+  pull_request:
+jobs:
+  test:
+    runs-on: zode-2x4
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install pytest
+      - run: zode-ci test -- python -m pytest
+```
+
+`fetch-depth: 0` gives `zode-ci` the history it needs to work out what a pull request changed, for [test selection](/ci/selection). Without it the job still runs and passes; selection just records a full run.
+
+At the end of the step the log shows one line per run, for example:
+
+```
+zode-ci: selection (shadow): full run: CI workflow changed: .github/workflows/test.yml
+zode-ci: pytest: 6 passed, 0 failed, 0 skipped, 0 todo, 0 errors (6 tests) stored as zti_bk2ubxmogeqgqprw
+```
+
+## What differs from GitHub-hosted runners
+
+- Packages installed with `apt` are not kept between jobs; only the warm disk is.
+- What the CI image still lacks against GitHub's is published with every image release in [`PARITY.md`](https://github.com/zodeops/runner-images/blob/main/images/ci-ubuntu-24.04/PARITY.md).
+- Speed: see the [benchmark](/ci/benchmark). Today Zode is slower than GitHub on the benchmark set, and the page says by how much.
