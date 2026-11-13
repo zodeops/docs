@@ -42,6 +42,14 @@ To use an API key instead of your sign-in, for example on a shared machine, give
 
 The server also sends the agent short instructions: work happens in `/workspace`, refer to sandboxes by name, fork to try two approaches, delete when done.
 
+## Agent skill
+
+A skill teaches Claude Code, Codex, Cursor and other agents when and how to use Zode: making sandboxes, forking for parallel work, snapshots, images and secrets. It is built from these docs, so it stays current.
+
+```bash
+npx skills add https://docs.zode.dev
+```
+
 ## Tools
 
 Every `sandbox` parameter takes a sandbox name or `sbx_` id. Tools that return a sandbox return `name`, `id`, `status`, `size` and `region`.

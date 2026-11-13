@@ -1,9 +1,9 @@
 ---
 title: "Agents"
-description: "Run coding agents in sandboxes on your own provider keys, with key failover, spend caps and a loop breaker on the host. AI spend is shown, never billed."
+description: "Run coding agents in sandboxes on your Claude or ChatGPT subscription or your own provider keys, with key failover, spend caps and a loop breaker on the host. AI spend is shown, never billed."
 ---
 
-Every sandbox has five coding agents ("harnesses") installed. You connect your own model provider keys once. The keys never enter the VM: the host's egress proxy adds them to each request on the way out.
+Every sandbox has five coding agents ("harnesses") installed. Sign them in once, with your Claude or ChatGPT subscription or your own model provider keys. Keys and the Claude token never enter the VM: the host's egress proxy adds them to each request on the way out.
 
 ## Harnesses
 
@@ -38,6 +38,28 @@ Posting again for the same provider replaces the key. `DELETE /v1/agents/credent
 
 Keys belong to a person, so an API key whose member has never signed in to Zode gets 403 `no_user`.
 
+## Use your Claude or ChatGPT subscription
+
+Claude Code can run on your Claude plan (Pro, Max, Team or Enterprise) and Codex on your ChatGPT plan, instead of an API key. Calls then count against your plan's limits, not your API bill or Zode's spend caps.
+
+In the console, open **Agents & proxying**, then **Claude Code** or **Codex**, and click **Sign in** on the subscription row. A tab opens on Claude's or ChatGPT's own sign-in page:
+
+- **Claude**: approve, then paste the code the page shows back into the console.
+- **ChatGPT**: enter the one-time code the console shows.
+
+The sign-in runs the official CLI (`claude setup-token` or `codex login --device-auth`) in one of your running sandboxes. If you have none, Zode starts a short-lived one for the sign-in and deletes it when you finish, so you never need a sandbox first. Zode never sees your password and holds no OAuth client of Anthropic's or OpenAI's.
+
+You can also run the command on your own machine and paste what it prints: **Paste a token** for Claude, **Paste auth.json** for Codex.
+
+### Where your login lives
+
+- **Claude**: the token stays on the host. Your sessions get a placeholder, and the host swaps the real token in only on requests to `api.anthropic.com`. Each sandbox has its own placeholder, so one read from inside a VM is useless anywhere else.
+- **ChatGPT**: Codex needs its `auth.json` on disk. Zode writes it into the sandbox only while you have a session open there and takes it back, with any refreshed tokens, when the last one ends. Teammates in that sandbox at the same moment, and forks taken then, can read it.
+
+A login is yours: it is sealed, never listed to other members, and used only in sandboxes you created or forked. A teammate's session in your sandbox does not get it.
+
+One sign-in method is in use at a time per agent. **Switch to API keys** goes back to your keys, and **Disconnect** deletes the login.
+
 ## Default harness and models
 
 `PATCH /v1/agents/settings` stores your default harness and a default model per harness. `""` clears a value. A model the harness does not list answers 400 `invalid_request`.
@@ -49,11 +71,21 @@ curl -s -X PATCH https://api.zode.dev/v1/agents/settings \
   -d '{"default_harness": "claude-code", "default_models": {"claude-code": "claude-sonnet-4-5"}}'
 ```
 
-The models offered are the ones Zode has prices for, so every default is metered. The console shows these choices; no CLI command reads them yet.
+The models offered are the ones Zode has prices for, so every default is metered. `zode prompt` uses these defaults.
 
 ## Run an agent in a sandbox
 
-The agent's SDK wants its key variable set, so set it to any placeholder. The proxy removes it and puts the real key in.
+`zode prompt` gives the default agent one task in a sandbox and streams what it does. It signs the agent in the way you chose, subscription or keys.
+
+```bash
+zode prompt box "fix the failing tests"
+zode prompt box --agent codex "add a /healthz endpoint"
+zode prompt --new --size large "upgrade the test suite to vitest"
+```
+
+`--model` picks a model, `--cd` a directory in the sandbox, and `--new` makes a sandbox first. The agent runs unattended with its own permission prompts off, since nobody is there to answer them inside the VM. See [the CLI](/cli/sandboxes#give-an-agent-a-task).
+
+With `zode exec` you run the agent yourself. On API keys, set the agent's key variable to any placeholder; the proxy removes it and puts the real key in:
 
 ```bash
 zode exec -e ANTHROPIC_API_KEY=zode box -- claude -p "fix the failing tests"

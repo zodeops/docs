@@ -102,6 +102,24 @@ stdin: piped input is streamed to the command. If your stdin is a terminal and y
 
 If the kernel kills the command for running out of memory, `zode` prints `zode: killed: out of memory (peak N MB)`. A sandbox that is not running gives `zode: demo is stopped; zode start demo`.
 
+## Give an agent a task
+
+```bash
+zode prompt box "fix the failing tests"
+```
+
+Runs your default coding agent (set under **Agents & proxying**, Claude Code otherwise) on one task in the sandbox and streams its output. The command exits with the agent's exit code.
+
+| Flag | What it does |
+|---|---|
+| `--agent A` | `claude-code`, `codex`, `opencode`, `pi` or `kimi-code` |
+| `--model M` | a model id the agent takes; defaults to the one set in the console |
+| `--cd DIR` | run in this directory in the sandbox |
+| `-e KEY=VALUE` | set a variable for the agent (`-e KEY` passes yours) |
+| `--new` | make a sandbox first; `--size` and `--max-cost` as for `zode new` |
+
+The agent signs in with your subscription or your keys, whichever you chose for it. It runs with its own permission prompts off, because nobody can answer them in an unattended VM.
+
 ## Fork
 
 ```bash
