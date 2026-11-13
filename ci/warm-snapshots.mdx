@@ -29,7 +29,22 @@ We tested this live: a token planted in every one of those paths was gone in the
 
 ## How long it lives
 
-The newest 2 snapshots per key are kept. One nobody started from for 14 days goes. A snapshot taken on another image is not used, so the first job after an image upgrade starts clean. Every 7 days the next writing job starts clean on purpose, so a build that only passes on a warm disk shows up. A snapshot over the size cap (40 GB by default) is not kept.
+The newest 2 snapshots per key are kept. One nobody started from for 14 days goes. A snapshot taken on another image is not used, so the first job after an image change starts clean, and its own green run writes the first snapshot for the new image. Every 7 days the next writing job starts clean on purpose, so a build that only passes on a warm disk shows up. A snapshot over the size cap (40 GB by default) is not kept.
+
+## Turn off setup-go's own cache
+
+<Warning>
+If a job uses `actions/setup-go` with its default cache, set `cache: false` on Zode. The warm disk already holds the Go module and build caches, and the action still downloads its own cache archive and extracts it over them. On the helm benchmark, **Setup Go** took 35 s from a clean disk and 67 to 107 s from a warm one with the action's cache on.
+
+```yaml
+- uses: actions/setup-go@v5
+  with:
+    go-version-file: go.mod
+    cache: false
+```
+</Warning>
+
+We have only measured this for `setup-go`. The `cache:` options of other `setup-*` actions keep working against the node's [Actions cache](/ci/move-a-workflow).
 
 ## Settings
 

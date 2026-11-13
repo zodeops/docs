@@ -80,5 +80,6 @@ zode-ci: pytest: 6 passed, 0 failed, 0 skipped, 0 todo, 0 errors (6 tests) store
 ## What differs from GitHub-hosted runners
 
 - Packages installed with `apt` are not kept between jobs; only the warm disk is.
+- A job that uses `actions/setup-go` should set `cache: false` on Zode: the warm disk already has the module cache, and the action's own restore made helm's **Setup Go** 2 to 3 times slower. See [Warm snapshots](/ci/warm-snapshots).
 - What the CI image still lacks against GitHub's is published with every image release in [`PARITY.md`](https://github.com/zodeops/runner-images/blob/main/images/ci-ubuntu-24.04/PARITY.md).
 - Speed: see the [benchmark](/ci/benchmark). Today Zode is slower than GitHub on the benchmark set, and the page says by how much.
