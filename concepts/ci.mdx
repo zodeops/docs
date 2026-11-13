@@ -5,10 +5,6 @@ description: "Run GitHub Actions jobs on fresh Zode sandboxes with runs-on: zode
 
 CI on Zode runs a GitHub Actions job in a fresh sandbox, one sandbox per job, deleted when the job ends. You pay for the runner's compute from creation to deletion.
 
-<Warning>
-CI is not switched on in production yet. `GET /v1/ci` answers `"configured": false`, and the console's CI page says CI isn't set up. The rest of this page describes how it works once it is.
-</Warning>
-
 ## Set it up
 
 1. An owner or admin opens the console, Configure, CI, and clicks **Install on GitHub**. Installation happens in the console only; there is no CLI or API-key flow for it.
@@ -24,7 +20,7 @@ jobs:
       - run: npm ci && npm test
 ```
 
-The Zode GitHub App asks for three repository permissions: Administration (read and write, used only to register and remove just-in-time runners), Actions (read) and Metadata (read).
+The Zode GitHub App asks for these repository permissions: Administration (read and write, used only to register and remove just-in-time runners), Actions (read) and Metadata (read).
 
 ## Runner sizes
 
@@ -43,7 +39,9 @@ The Zode GitHub App asks for three repository permissions: Administration (read 
 2. Zode registers a just-in-time runner on the repository, creates a sandbox of that size (audited as `sandbox.create` by `ci:github`) and starts the runner in it.
 3. The job runs. When GitHub reports it completed, Zode records the conclusion and deletes the sandbox.
 
-Every runner boots a clean copy of the [`ci-ubuntu-24.04` official image](/concepts/official-images), which lists the software it has. There is no per-repository cache yet, so `cache_hit` is always `false`. A runner that lives longer than 6 hours is deleted.
+Every runner boots the [`ci-ubuntu-24.04` official image](/concepts/official-images), which lists the software it has. A repository that ran a job in the last 30 minutes keeps a standby runner ready, so the next job does not wait for a machine. With [warm snapshots](/ci/warm-snapshots) on, `cache_hit` says whether the job started from the last green default-branch job's disk. A runner that lives longer than 6 hours is deleted.
+
+To move a workflow, see [Move a workflow to Zode](/ci/move-a-workflow). For results, sharding and selection, wrap the test command in [`zode-ci test`](/ci/zode-ci-test).
 
 ## Monthly cap
 

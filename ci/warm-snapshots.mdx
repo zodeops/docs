@@ -1,0 +1,52 @@
+---
+title: "Warm snapshots"
+description: "What a warm snapshot keeps, which jobs may write it, which may read it, and where Zode does less than the PRD asks."
+---
+
+A green job on the default branch leaves its caches behind for the next job with the same key: repository, workflow, job name (with its matrix values), runner size and the image the runner booted.
+
+## What is kept
+
+Not the whole machine. A runner gets a second disk laid over `/home/runner` (the checkout, `~/.cache`, `~/.npm`, `~/go`, `~/.m2` and the rest of home), `/root` and `/opt/hostedtoolcache`, and Docker's and containerd's state move onto it. Only that disk is snapshotted. Packages installed with `apt` and anything else on the root disk start from the image every time.
+
+Taking the snapshot happens after GitHub has ended the job and is not billed. Attaching one to the next runner takes under a tenth of a second. The job shows `cache_hit` with the snapshot's age and size, or the reason it started clean.
+
+## Who may write
+
+Only a `push`, `schedule` or `workflow_dispatch` run on the default branch, or on a branch an owner or admin lists in `save_branches`, from the repository itself, and only when the job succeeded. Nothing else writes: not pull requests (`pull_request_target` included), not other branches, not `merge_group` or `workflow_run`.
+
+## Who may read
+
+- The repository's own jobs, its own pull requests included, read the shared snapshot. They never write one.
+- A pull request from a fork starts clean unless an owner or admin turns `fork_read` on. If GitHub still hands a fork job a warm runner, a hook that runs before any step powers the runner off, and the job fails with "Zode stopped this runner"; a re-run starts clean.
+- Another workspace never reads your snapshots; the node checks the workspace on every use.
+
+## What is removed before a snapshot is kept
+
+From the warm disk, for both `/home/runner` and `/root`: `~/.docker/config.json`, `~/.npmrc`, `~/.netrc`, `~/.aws`, `~/.ssh`, `~/.config/gh`, the runner temp folder, and every git auth header (`http.*.extraheader`, `includeIf`) in each checkout and `.gitconfig`, plus any path you add in `scrub_paths`. The runner's registration, `_diag` and the job token live on the root disk, which is never kept. Strict mode keeps only the paths you list in `keep_paths`.
+
+We tested this live: a token planted in every one of those paths was gone in the next job; a fork pull request could not read a file a default-branch job wrote; and a pull request job could not change what the next default-branch job saw.
+
+## How long it lives
+
+The newest 2 snapshots per key are kept. One nobody started from for 14 days goes. A snapshot taken on another image is not used, so the first job after an image upgrade starts clean. Every 7 days the next writing job starts clean on purpose, so a build that only passes on a warm disk shows up. A snapshot over the size cap (40 GB by default) is not kept.
+
+## Settings
+
+Off until you name repositories. Owners and admins:
+
+```bash
+curl -s -X PATCH https://api.zode.dev/v1/ci/snapshots/settings \
+  -H "Authorization: Bearer $ZODE_TOKEN" -H "Content-Type: application/json" \
+  -d '{"repos": ["acme/*"], "save_branches": ["release"], "fork_read": false,
+       "strict": false, "scrub_paths": ["~/.config/acme"], "keep_paths": [], "size_cap_gb": 40}'
+```
+
+`GET /v1/ci/snapshots` lists them (every role); `DELETE /v1/ci/snapshots/{id}` removes one.
+
+## Where Zode does less than planned
+
+- **No pull-request-only snapshots.** The plan let a same-repository pull request keep a snapshot of its own. GitHub hands a runner to any queued job of the repository with the same labels before Zode knows which job took it, so a disk warmed by a pull request could reach a default-branch job. So pull requests read the shared snapshot and keep nothing.
+- **No per-workspace encryption on nodes yet.** Snapshots are kept apart by workspace and checked on every use, but they sit in the node's storage pool like every sandbox disk, without a key of their own per workspace.
+- **Snapshots stay on their node.** When that node is full, the runner starts clean on another one.
+- **Speed.** The goal is dependency installs and image pulls 5x faster on the second run. Some steps reach it (Node and Go setup, Ruby gems); others do not yet (apt, Maven, Docker builds). The [benchmark](/ci/benchmark) shows the whole job.

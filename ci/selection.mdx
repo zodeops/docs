@@ -1,0 +1,52 @@
+---
+title: "Test selection"
+description: "Off, Shadow or Enforce per repository. Shadow runs everything and records what it would have skipped; the miss count is how you know whether to trust it."
+---
+
+For a change, Zode works out which tests can reach it and records the path for every test it would run and the reason for every test it would skip. What happens with that answer depends on the repository's mode.
+
+| Mode | What runs | Status |
+|---|---|---|
+| **Off** | Everything. Nothing is asked. | Available |
+| **Shadow** | Everything. Each test is recorded as selected, skipped or full run, with why. | Available; the default for every repository |
+| **Enforce** | Only the selected tests; the skipped ones run afterwards in a background copy of the machine. | Not available yet |
+
+Selection needs the test step wrapped in [`zode-ci test`](/ci/zode-ci-test) and the base branch in the checkout (`fetch-depth: 0`). Without the history it records `change_set_unknown` and a full run.
+
+## Setting the mode
+
+Owners and admins set it with the API (the console gets a switch on the repository's Tests tab):
+
+```bash
+curl -s https://api.zode.dev/v1/ci/selection -H "Authorization: Bearer $ZODE_TOKEN"
+
+curl -s -X PATCH https://api.zode.dev/v1/ci/selection \
+  -H "Authorization: Bearer $ZODE_TOKEN" -H "Content-Type: application/json" \
+  -d '{"repo": "acme/api", "mode": "off"}'
+```
+
+`enforce` answers `409 enforce_not_available` until the repository has earned it (below). Every change is audited as `ci.selection_mode`.
+
+## How tests are matched to a change
+
+- **Jest**: Jest's own related-files resolution, with your config, module mappers and roots.
+- **Vitest**: Vitest's own module graph.
+- **Go**: the package graph from `go list -deps -test`. A warm snapshot also keeps Go's test cache.
+- **pytest**: a map of which files each test ran, recorded on full runs, with the import graph as a fallback.
+- Tests that load modules by a computed name run whenever any module changed.
+
+## When everything runs anyway
+
+The full suite runs when a change touches a lockfile, a package manifest, a CI workflow, build or test configuration, an env file or a file outside every known package; when the image changed; when the map is missing or too old; and when more than 30% of tests would be selected anyway. New tests, edited tests and tests that failed in their last 20 runs always run. The reason is recorded on the run.
+
+## The miss count
+
+A miss is a test that selection would have skipped and that failed. It is the one number that says whether skipping is safe for a repository.
+
+- **In Shadow** every test runs, so a miss costs nothing: Zode sees that a skipped test failed and counts a would-be miss (`outcome.would_miss` on `GET /v1/ci/selection-runs`). A repository can move to Enforce only after 200 Shadow runs in a row with no miss.
+- **In Enforce** the default branch still runs the full suite, and on other branches the skipped tests run in a background copy of the machine after the check has reported, as a second check, **Zode full suite**. A skipped test that fails there is a miss: Zode stores the commit, the test and why it was skipped, alerts you, and puts the repository back in Shadow until its map is rebuilt.
+- The target is zero misses per 100,000 skipped tests, and misses are published, not hidden.
+
+<Note>
+The background full suite, the miss ledger and Enforce are not built yet. Until they are, every repository runs every test, and the miss count you see is the Shadow count of would-be misses.
+</Note>

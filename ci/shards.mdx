@@ -1,0 +1,33 @@
+---
+title: "Shards"
+description: "Split one test step across copies of the job's machine, with no matrix in the workflow."
+---
+
+```yaml
+      - run: zode-ci test --shards auto -- python -m pytest
+```
+
+`--shards <n>` or `--shards auto` splits a Jest, Vitest, pytest or `go test` suite across copies of the job's own machine, inside the one GitHub step. The workflow has no matrix and the job stays one job.
+
+## How it works
+
+1. `zode-ci` lists the test files the way the runner would and asks Zode for a split. Each file is weighed by its median recorded time over 14 days; files with no history get the median of those that have one. Files go longest first to the shard with the least time.
+2. Zode copies the job's disk once and boots each worker from it: same size, same checkout, installed packages and Docker images, none of the runner's processes or memory. A worker starts in about 20 seconds.
+3. Before anything runs on a worker, `zode-ci` removes what only the runner may hold: the job token, the runner's registration, the step scripts (they carry your secrets expanded) and checkout credentials. A worker never talks to GitHub as the runner, and its shard runs without the Actions runtime tokens or `GITHUB_TOKEN`.
+4. Workers' output streams into the step, each line prefixed `[shard 3/8]`. A worker that finishes takes the next queued shard; so does the job's machine.
+5. The step exits with the first failing shard's code and names each failing shard and its failing tests.
+
+`auto` aims the longest shard at about 60 seconds of wall time, within the job's limit (16 workers by default) and what your plan and the node can run at once. Shards that do not fit queue on the workers already running instead of failing.
+
+## Cost and cleanup
+
+Each worker is billed at the runner's price from its creation to its deletion, and that cost is added to the job (and to the monthly CI cap). Workers are deleted when they have no shard left, when the step ends or is cancelled, and in any case when the job's runner is released.
+
+## When it runs as one shard
+
+`zode-ci` says why on a line of its own and runs everything on the job's machine when: there is no job token, the runner is not one of the four, a Jest or Vitest command names test paths itself, the step runs in a container `zode-ci` cannot name, the files cannot be listed, or the split says one shard.
+
+## Not yet
+
+- **Workers with memory.** A worker that keeps the runner's running services (a Postgres started by the job, for example) would start in about a second, but it copies the runner process too. It stays off until a check proves a worker never holds the runner's session or the job's secrets. Today a `container:` job's services are started again on each worker.
+- **Numbers.** Sharded times on the [benchmark](/ci/benchmark) are pending: the target is a 10-minute suite in at most 2 minutes on 8 shards, fork time included, with shards ending within 15% of each other. This page will link the measured run when it is published.
