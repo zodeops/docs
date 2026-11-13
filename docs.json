@@ -72,8 +72,7 @@
               "ci/zode-ci-test",
               "ci/shards",
               "ci/selection",
-              "ci/warm-snapshots",
-              "ci/benchmark"
+              "ci/warm-snapshots"
             ]
           },
           {
